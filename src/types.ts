@@ -24,6 +24,7 @@ export type RadarEvent = {
   lng: number
   createdAt: number
   userName: string
+  userId?: string | null
   avatarUrl?: string | null
   reactions: number
   comments: number

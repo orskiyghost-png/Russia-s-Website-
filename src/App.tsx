@@ -19,6 +19,7 @@ import {
   Menu,
   Send,
   MessageCircle,
+  MessageSquare,
   Navigation,
   Plus,
   Search,
@@ -35,7 +36,7 @@ import { CityMap, LocateMeButton } from './CityMap'
 import { useAuth } from './auth'
 import { Captcha } from './Captcha'
 
-import { DEFAULT_CENTER, addComment, createEvent as createServerEvent, eventLayer, fetchComments, fetchEvents, fetchOpenReports, kindConfig, layerConfig, relativeTime, reportEvent, reverseGeocode, setEventModerationStatus, subscribeToEvents, toggleReaction } from './data'
+import { DEFAULT_CENTER, addComment, createEvent as createServerEvent, eventLayer, fetchComments, fetchDirectMessages, fetchEvents, fetchOpenReports, kindConfig, layerConfig, relativeTime, reportEvent, reverseGeocode, sendDirectMessage, setEventModerationStatus, subscribeToEvents, toggleReaction } from './data'
 
 import type { EventKind, EventComment, Layer, RadarEvent } from './types'
 
@@ -78,6 +79,8 @@ function App() {
   const [isProfileOpen, setIsProfileOpen] = useState(false)
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false)
   const [isAdminOpen, setIsAdminOpen] = useState(false)
+  const [isMessagesOpen, setIsMessagesOpen] = useState(false)
+  const [messageRecipient, setMessageRecipient] = useState<{ id: string; name: string } | null>(null)
   const [isAiOpen, setIsAiOpen] = useState(false)
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [toast, setToast] = useState<Toast | null>(null)
@@ -124,6 +127,8 @@ function App() {
       notify('Не удалось сохранить реакцию. Попробуйте ещё раз.', 'error')
     }
   }
+
+  const openMessagesFor = (event: RadarEvent) => { if (!event.userId || !user || user.isAnonymous) return; setMessageRecipient({ id: event.userId, name: event.userName }); setIsMessagesOpen(true); setSelectedEvent(null) }
 
   const reportEventFromSheet = async (event: RadarEvent, reason: string) => {
     try {
@@ -289,7 +294,7 @@ function App() {
       <div className="map-controls glass-panel"><LocateMeButton onLocated={(location) => { setCenter(location); notify('Карта центрирована на вас') }} onError={(message) => notify(message, 'error')} /><button className="map-floating-control" onClick={() => setCenter(DEFAULT_CENTER)} title="Вернуться к Орску" aria-label="Вернуться к Орску"><Navigation size={16} /></button></div>
       {!selectedEvent && <button className="ai-fab glass-panel" onClick={() => setIsAiOpen((value) => !value)} aria-label="Открыть PULSE AI"><Bot size={18} /><span>PULSE AI</span></button>}
 
-      <AnimatePresence>{selectedEvent && <EventSheet event={selectedEvent} canReport={Boolean(user && !user.isAnonymous)} onClose={() => setSelectedEvent(null)} onReact={() => { void reactToEvent(selectedEvent) }} onComment={(text) => { void commentOnEvent(selectedEvent, text) }} onReport={(reason) => { void reportEventFromSheet(selectedEvent, reason) }} />}</AnimatePresence>
+      <AnimatePresence>{selectedEvent && <EventSheet event={selectedEvent} canReport={Boolean(user && !user.isAnonymous)} canMessage={Boolean(user && !user.isAnonymous && selectedEvent.userId)} onClose={() => setSelectedEvent(null)} onReact={() => { void reactToEvent(selectedEvent) }} onComment={(text) => { void commentOnEvent(selectedEvent, text) }} onReport={(reason) => { void reportEventFromSheet(selectedEvent, reason) }} onMessage={() => openMessagesFor(selectedEvent)} />}</AnimatePresence>
       <motion.div className="event-strip" initial={{ y: 18, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={spring}>
         <div className="strip-heading"><span><Activity size={14} /> В ЭФИРЕ</span><b>{filteredEvents.length} событий</b></div>
         <div className="strip-list">{filteredEvents.slice(0, 4).map((event) => <MiniEvent key={event.id} event={event} selected={event.id === selectedEvent?.id} onClick={() => selectEvent(event)} />)}</div>
@@ -300,7 +305,7 @@ function App() {
     <AnimatePresence>{isAuthOpen && <AuthModal onClose={() => setIsAuthOpen(false)} onSuccess={() => { setIsAuthOpen(false); notify('Добро пожаловать в PULSE') }} />}</AnimatePresence>
     <AnimatePresence>{isReportOpen && pendingCoords && <ReportModal coords={pendingCoords} onClose={() => { setIsReportOpen(false); setPendingCoords(null) }} onSubmit={createEvent} />}</AnimatePresence>
     <AnimatePresence>{isProfileOpen && user && <ProfileModal onClose={() => setIsProfileOpen(false)} onAdminOpen={() => { setIsProfileOpen(false); setIsAdminOpen(true) }} />}</AnimatePresence>
-    <AnimatePresence>{isNotificationsOpen && <NotificationsPanel onClose={() => setIsNotificationsOpen(false)} />}</AnimatePresence><AnimatePresence>{isAdminOpen && user?.role === 'admin' && <AdminPanel events={events} onClose={() => setIsAdminOpen(false)} onNotify={notify} />}</AnimatePresence><AnimatePresence>{isAiOpen && <PulseAiPanel events={filteredEvents} onClose={() => setIsAiOpen(false)} />}</AnimatePresence>
+    <AnimatePresence>{isNotificationsOpen && <NotificationsPanel onClose={() => setIsNotificationsOpen(false)} />}</AnimatePresence><AnimatePresence>{isMessagesOpen && messageRecipient && <MessagesPanel recipient={messageRecipient} onClose={() => setIsMessagesOpen(false)} onNotify={notify} />}</AnimatePresence><AnimatePresence>{isAdminOpen && user?.role === 'admin' && <AdminPanel events={events} onClose={() => setIsAdminOpen(false)} onNotify={notify} />}</AnimatePresence><AnimatePresence>{isAiOpen && <PulseAiPanel events={filteredEvents} onClose={() => setIsAiOpen(false)} />}</AnimatePresence>
     <AnimatePresence>{toast && <motion.div className={`toast-message ${toast.tone ?? 'success'}`} initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 12, opacity: 0 }}><span>{toast.tone === 'error' ? <X size={15} /> : <Check size={15} />}</span>{toast.message}</motion.div>}</AnimatePresence>
   </div>
 }
@@ -312,7 +317,7 @@ function MiniEvent({ event, selected, onClick }: { event: RadarEvent; selected: 
   return <motion.button className={`mini-event ${selected ? 'selected' : ''} ${isHot ? 'hot' : ''}`} onClick={onClick} initial={{ opacity: 0, y: 7 }} animate={{ opacity: 1, y: 0 }} transition={{ ...spring, duration: .45 }} whileTap={{ scale: .98 }}><span className={`mini-event-icon ${config.color}`}><Icon size={15} /></span><span className="mini-event-copy"><strong>{event.title}</strong><small><MapPin size={11} /> {humanLocation(event.location)}</small></span><span className="mini-event-time">{relativeTime(event.createdAt)}</span><ChevronRight size={14} /></motion.button>
 }
 
-function EventSheet({ event, canReport, onClose, onReact, onComment, onReport }: { event: RadarEvent; canReport: boolean; onClose: () => void; onReact: () => void; onComment: (text: string) => void; onReport: (reason: string) => void }) {
+function EventSheet({ event, canReport, canMessage, onClose, onReact, onComment, onReport, onMessage }: { event: RadarEvent; canReport: boolean; canMessage: boolean; onClose: () => void; onReact: () => void; onComment: (text: string) => void; onReport: (reason: string) => void; onMessage: () => void }) {
   const config = kindConfig[event.kind]
   const Icon = config.icon
   const [comment, setComment] = useState('')
@@ -327,6 +332,7 @@ function EventSheet({ event, canReport, onClose, onReact, onComment, onReport }:
     <div className="sheet-footer"><span className="sheet-user"><span className="tiny-avatar">{event.avatarUrl ? <img src={event.avatarUrl} alt="" /> : initials(event.userName)}</span>{event.userName}</span><button className={`sheet-react ${event.likedByMe ? 'active' : ''}`} onClick={onReact} aria-label={event.likedByMe ? 'Убрать лайк' : 'Поставить лайк'}><ThumbsUp size={14} /> {event.reactions}</button><span className="sheet-comments"><MessageCircle size={14} /> {event.comments}</span></div>
     {!!event.commentsList?.length && <div className="comments-list" aria-label="Комментарии">{event.commentsList.map((item) => <div className="comment-item" key={item.id}><span className="tiny-avatar">{item.avatarUrl ? <img src={item.avatarUrl} alt="" /> : initials(item.userName)}</span><div><strong>{item.userName}</strong><p>{item.body}</p></div></div>)}</div>}
     <form className="comment-form" onSubmit={(event) => { event.preventDefault(); submitComment() }}><input className="text-[16px]" value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Написать комментарий…" aria-label="Комментарий" /><button type="submit" disabled={!comment.trim()} aria-label="Добавить комментарий"><Send size={14} /></button></form>
+    {canMessage && <button className="text-action" onClick={onMessage}><MessageSquare size={14} /> Написать автору</button>}
     {canReport && !event.id.startsWith('orsk-') && <div className="report-area">{reporting ? <form className="report-form" onSubmit={(formEvent) => { formEvent.preventDefault(); submitReport() }}><input className="text-[16px]" value={reportReason} onChange={(inputEvent) => setReportReason(inputEvent.target.value)} placeholder="Что нужно проверить?" aria-label="Причина жалобы" /><button type="submit" disabled={reportReason.trim().length < 3}>Отправить</button></form> : <button className="text-action" onClick={() => setReporting(true)}>Пожаловаться на сигнал</button>}</div>}
   </motion.aside>
 }
@@ -407,6 +413,18 @@ function ProfileModal({ onClose, onAdminOpen }: { onClose: () => void; onAdminOp
   const save = async () => { setSaving(true); const result = await updateProfile({ name: name.trim() || user.name, city, bio: bio.trim() || null, neighborhood: neighborhood.trim() || null, notifications, avatarUrl: avatarPreview || null }); if (result) setError(result); else onClose(); setSaving(false) }
   return <ModalFrame onClose={onClose}><div className="profile-modal"><div className="profile-modal-header"><button className="profile-avatar-button" onClick={() => avatarInput.current?.click()} aria-label="Изменить аватар"><span className="large-avatar">{avatarPreview ? <img src={avatarPreview} alt="Аватар" /> : initials(user.name)}</span><span className="avatar-edit-badge"><Plus size={13} /></span></button><input ref={avatarInput} className="visually-hidden-file" type="file" accept="image/*" onChange={(event) => handleAvatar(event.target.files?.[0])} /><div><p className="modal-overline">МОЙ PULSE</p><h2>{user.name}<span>.</span></h2><span className="profile-email">{user.email}</span></div></div><p className="avatar-hint">Нажмите на аватар, чтобы выбрать фото из галереи</p><div className="profile-form"><label className="input-label">Ваше имя<input className="text-[16px]" value={name} onChange={(event) => setName(event.target.value)} /></label><label className="input-label">Родной город<div className="select-wrap"><Navigation size={15} /><select className="text-[16px]" value={city} onChange={(event) => setCity(event.target.value)}><option>Орск</option><option>Москва</option><option>Санкт-Петербург</option><option>Екатеринбург</option><option>Казань</option></select><ChevronDown size={14} /></div></label><label className="input-label">О себе<textarea className="text-[16px]" value={bio} onChange={(event) => setBio(event.target.value)} maxLength={240} placeholder="Коротко о себе" /></label><label className="input-label">Район города<input className="text-[16px]" value={neighborhood} onChange={(event) => setNeighborhood(event.target.value)} maxLength={120} placeholder="Например, 2-й микрорайон" /></label><button className="setting-toggle" onClick={() => setNotifications((value) => !value)}><span><Bell size={16} /><span><strong>Уведомления рядом</strong><small>Получать важные сигналы в вашем городе</small></span></span><i className={notifications ? 'on' : ''}><b /></i></button></div>{error && <p className="form-error">{error}</p>}<div className="profile-actions">{user.role === 'admin' && <button className="text-action" onClick={onAdminOpen}>Открыть модерацию</button>}<button className="logout-action" onClick={() => { void logout(); onClose() }}><LogOut size={15} /> Выйти</button><button className="primary-action compact" disabled={saving} onClick={() => { void save() }}>{saving ? 'Сохраняем…' : 'Сохранить'} <Check size={15} /></button></div></div></ModalFrame>
   }
+
+function MessagesPanel({ recipient, onClose, onNotify }: { recipient: { id: string; name: string }; onClose: () => void; onNotify: (message: string, tone?: Toast['tone']) => void }) {
+  const { user } = useAuth()
+  const [messages, setMessages] = useState<Awaited<ReturnType<typeof fetchDirectMessages>>>([])
+  const [body, setBody] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [sending, setSending] = useState(false)
+  const load = async () => { setLoading(true); try { setMessages(await fetchDirectMessages(recipient.id)) } catch { onNotify('Сообщения пока недоступны. Примените migration для direct messages.', 'error') } finally { setLoading(false) } }
+  useEffect(() => { void load() }, [recipient.id])
+  const submit = async () => { const value = body.trim(); if (!value || sending || !user || user.isAnonymous) return; setSending(true); try { const message = await sendDirectMessage(recipient.id, value); setMessages((current) => [...current, message]); setBody('') } catch { onNotify('Не удалось отправить сообщение. Попробуйте позже.', 'error') } finally { setSending(false) } }
+  return <motion.aside className="notifications-panel messages-panel glass-panel" initial={{ x: 26, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 26, opacity: 0 }} transition={spring}><div className="panel-header"><div><p className="modal-overline">PULSE / DIRECT</p><h2>{recipient.name}</h2></div><button className="sheet-close" onClick={onClose} aria-label="Закрыть сообщения"><X size={17} /></button></div><div className="messages-list">{loading ? <p className="panel-empty">Загружаем переписку…</p> : messages.length === 0 ? <p className="panel-empty">Начните диалог с автором сигнала.</p> : messages.map((message) => <div className={`message-bubble ${message.senderId === user?.id ? 'outgoing' : 'incoming'}`} key={message.id}>{message.body}</div>)}</div><form className="message-compose" onSubmit={(event) => { event.preventDefault(); void submit() }}><input className="text-[16px]" value={body} onChange={(event) => setBody(event.target.value)} placeholder="Написать сообщение…" maxLength={1000} aria-label="Сообщение" /><button type="submit" disabled={!body.trim() || sending} aria-label="Отправить сообщение"><Send size={15} /></button></form></motion.aside>
+}
 
 function AdminPanel({ events, onClose, onNotify }: { events: RadarEvent[]; onClose: () => void; onNotify: (message: string, tone?: Toast['tone']) => void }) {
   const [reports, setReports] = useState<Awaited<ReturnType<typeof fetchOpenReports>>>([])

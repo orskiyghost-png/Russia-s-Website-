@@ -38,6 +38,7 @@ type EventRow = {
   address?: string | null
   moderation_status?: 'published' | 'hidden' | 'removed' | null
   created_at: string
+  user_id?: string | null
   user_name: string
   avatar_url?: string | null
   reactions: number
@@ -54,7 +55,7 @@ type CommentRow = {
 
 function fromRow(row: EventRow): RadarEvent {
   const address = row.address?.trim() || null
-  return { id: row.id, kind: row.kind, category: row.category, title: row.title, description: row.description, location: address || `${row.lat.toFixed(4)}, ${row.lng.toFixed(4)}`, address, lat: row.lat, lng: row.lng, createdAt: new Date(row.created_at).getTime(), userName: row.user_name, avatarUrl: row.avatar_url ?? null, reactions: row.reactions, comments: row.comments, likedByMe: false, commentsList: [] }
+  return { id: row.id, kind: row.kind, category: row.category, title: row.title, description: row.description, location: address || `${row.lat.toFixed(4)}, ${row.lng.toFixed(4)}`, address, lat: row.lat, lng: row.lng, createdAt: new Date(row.created_at).getTime(), userName: row.user_name, userId: row.user_id ?? null, avatarUrl: row.avatar_url ?? null, reactions: row.reactions, comments: row.comments, likedByMe: false, commentsList: [] }
 }
 
 async function attachLikedState(events: RadarEvent[]) {
@@ -76,7 +77,7 @@ async function normalizeEvents(rows: EventRow[]) {
 
 export async function fetchEvents(): Promise<{ events: RadarEvent[]; configured: boolean }> {
   if (!isSupabaseConfigured) return { events: seedEvents, configured: false }
-  const primary = await supabase.from('events').select('id, kind, category, title, description, lat, lng, address, moderation_status, created_at, user_name, avatar_url, reactions, comments').eq('moderation_status', 'published').order('created_at', { ascending: false }).limit(100)
+  const primary = await supabase.from('events').select('id, kind, category, title, description, lat, lng, address, moderation_status, created_at, user_id, user_name, avatar_url, reactions, comments').eq('moderation_status', 'published').order('created_at', { ascending: false }).limit(100)
   if (!primary.error) return { events: await normalizeEvents(primary.data as EventRow[]), configured: true }
   const primaryError = primary.error.message.toLowerCase()
   if (!primaryError.includes('avatar_url') && !primaryError.includes('address') && !primaryError.includes('moderation_status')) throw primary.error
@@ -116,6 +117,21 @@ export async function createEvent(payload: { kind: EventKind; category: string; 
 }
 
 export type EventReport = { id: string; eventId: string; reason: string; status: 'open' | 'reviewed' | 'dismissed'; createdAt: number }
+
+export type DirectMessage = { id: string; senderId: string; recipientId: string; body: string; createdAt: number }
+
+export async function fetchDirectMessages(otherUserId: string): Promise<DirectMessage[]> {
+  const { data, error } = await supabase.rpc('list_direct_messages', { p_other_user_id: otherUserId })
+  if (error) throw error
+  return (data ?? []).map((row: { id: string; sender_id: string; recipient_id: string; body: string; created_at: string }) => ({ id: row.id, senderId: row.sender_id, recipientId: row.recipient_id, body: row.body, createdAt: new Date(row.created_at).getTime() }))
+}
+
+export async function sendDirectMessage(recipientId: string, body: string): Promise<DirectMessage> {
+  const { data, error } = await supabase.rpc('send_direct_message', { p_recipient_id: recipientId, p_body: body.trim() })
+  if (error) throw error
+  const row = Array.isArray(data) ? data[0] : data
+  return { id: String(row.id), senderId: String(row.sender_id), recipientId: String(row.recipient_id), body: String(row.body), createdAt: new Date(row.created_at).getTime() }
+}
 
 export async function reportEvent(eventId: string, reason: string): Promise<void> {
   if (!isSupabaseConfigured || eventId.startsWith('orsk-')) throw new Error('REPORT_NOT_AVAILABLE')
