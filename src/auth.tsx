@@ -146,7 +146,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 function translateAuthError(message: string) {
   const normalized = message.toLowerCase()
-  if (normalized.includes('error sending magic link email') || normalized.includes('error sending email') || normalized.includes('smtp')) return 'Письмо не отправлено: проверьте Email provider и SMTP в Supabase.'
+  if (normalized.includes('error sending magic link email') || normalized.includes('error sending email') || normalized.includes('error sending confirmation email') || normalized.includes('smtp')) return 'Supabase вернул ошибку отправки письма. Проверьте SMTP/Resend sender в настройках проекта.'
   if (normalized.includes('invalid') && normalized.includes('token')) return 'Код истёк или введён неверно. Запросите новый код'
   if (normalized.includes('expired')) return 'Срок действия кода истёк. Запросите новый код'
   if (normalized.includes('email not confirmed')) return 'Подтвердите email кодом из письма'

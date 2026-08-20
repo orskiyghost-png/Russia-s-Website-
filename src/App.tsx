@@ -39,6 +39,7 @@ import { DEFAULT_CENTER, createEvent as createServerEvent, fetchEvents, kindConf
 import type { EventKind, Layer, RadarEvent } from './types'
 
 const spring = { type: 'spring' as const, stiffness: 320, damping: 30 }
+const SEARCH_FALLBACKS: Record<string, [number, number]> = { орск: [51.2049, 58.5668], москва: [55.7558, 37.6173], казань: [55.7879, 49.1233], екатеринбург: [56.8389, 60.6057], 'санкт-петербург': [59.9343, 30.3351] }
 const OTP_EMAIL_QUOTA_KEY = 'pulse-otp-email-quota-until'
 const OTP_EMAIL_QUOTA_MS = 60 * 60 * 1000
 
@@ -118,12 +119,25 @@ function App() {
     if (!value || searching) return
     setSearching(true)
     setSearchMessage('')
+    const fallback = SEARCH_FALLBACKS[value.toLowerCase()]
+    if (fallback) {
+      setCenter(fallback)
+      setSelectedEvent(null)
+      setQuery('')
+      setSearchMessage(value)
+      notify(`Карта центрирована: ${value}`)
+      setSearching(false)
+      return
+    }
+    const controller = new AbortController()
+    const timeout = window.setTimeout(() => controller.abort(), 8000)
     try {
-      const response = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&accept-language=ru&q=${encodeURIComponent(value)}`)
+      const response = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&accept-language=ru&q=${encodeURIComponent(value)}`, { signal: controller.signal })
       if (!response.ok) throw new Error('geocoding')
       const places = await response.json() as Array<{ lat: string; lon: string; display_name: string }>
       if (!places.length) {
         setSearchMessage('Город не найден')
+        notify('Город не найден', 'error')
         return
       }
       const place = places[0]
@@ -131,9 +145,12 @@ function App() {
       setQuery('')
       setSearchMessage(place.display_name.split(',').slice(0, 2).join(', '))
       setSelectedEvent(null)
+      notify('Карта перемещена к результату')
     } catch {
       setSearchMessage('Не удалось связаться с Nominatim')
+      notify('Поиск временно недоступен. Попробуйте название города ещё раз.', 'error')
     } finally {
+      window.clearTimeout(timeout)
       setSearching(false)
     }
   }
@@ -266,7 +283,7 @@ function AuthModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () 
     const result = mode === 'login' ? await login(normalizedEmail) : await register(name, normalizedEmail)
     if (result.error) {
       setError(result.error)
-      if (result.error.includes('отправка писем')) setNotice('Попробуйте ещё раз позже или проверьте настройки Email provider в Supabase.')
+      if (result.error.includes('Письмо') || result.error.includes('письмо')) setNotice('Если письмо не приходит, SMTP/Resend в Supabase всё ещё возвращает ошибку отправки.')
     } else {
       setChoice('otp'); setResendCooldown(60); setNotice(`Код отправлен на ${normalizedEmail}`); window.setTimeout(() => inputs.current[0]?.focus(), 50)
     }
