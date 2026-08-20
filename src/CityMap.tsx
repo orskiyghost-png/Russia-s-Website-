@@ -15,6 +15,25 @@ type CityMapProps = {
   onMapClick: (coords: { lat: number; lng: number }) => void
 }
 
+function MapLayoutSync() {
+  const map = useMap()
+  useEffect(() => {
+    const invalidate = () => map.invalidateSize({ pan: false, animate: false })
+    const frame = window.requestAnimationFrame(invalidate)
+    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => window.requestAnimationFrame(invalidate)) : null
+    observer?.observe(map.getContainer())
+    window.addEventListener('resize', invalidate, { passive: true })
+    window.addEventListener('orientationchange', invalidate, { passive: true })
+    return () => {
+      window.cancelAnimationFrame(frame)
+      observer?.disconnect()
+      window.removeEventListener('resize', invalidate)
+      window.removeEventListener('orientationchange', invalidate)
+    }
+  }, [map])
+  return null
+}
+
 function MapViewport({ center }: { center: [number, number] }) {
   const map = useMap()
   const lastCenter = useRef<[number, number]>(center)
@@ -64,8 +83,8 @@ const EventMarker = memo(function EventMarker({ event, selectedId, onSelect }: {
 })
 
 export function CityMap({ center, events, selectedId, theme, onSelect, onMapClick }: CityMapProps) {
-  const tileUrl = `https://{s}.basemaps.cartocdn.com/${theme === 'dark' ? 'dark_all' : 'light_all'}/{z}/{x}/{y}{r}.png`
-  return <MapContainer center={center as LatLngExpression} zoom={12} minZoom={3} maxZoom={19} zoomControl={false} attributionControl={false} scrollWheelZoom preferCanvas className="real-map"><TileLayer url={tileUrl} updateWhenIdle updateWhenZooming={false} keepBuffer={2} /><ZoomControl position="bottomright" /><MapViewport center={center} /><MapClickCapture onMapClick={onMapClick} />{events.map((event) => <EventMarker key={event.id} event={event} selectedId={selectedId} onSelect={onSelect} />)}</MapContainer>
+  const tileUrl = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
+  return <MapContainer center={center as LatLngExpression} zoom={12} minZoom={3} maxZoom={19} zoomControl={false} attributionControl={false} scrollWheelZoom preferCanvas className="real-map"><TileLayer url={tileUrl} updateWhenIdle updateWhenZooming={false} keepBuffer={2} crossOrigin /><ZoomControl position="bottomright" /><MapLayoutSync /><MapViewport center={center} /><MapClickCapture onMapClick={onMapClick} />{events.map((event) => <EventMarker key={event.id} event={event} selectedId={selectedId} onSelect={onSelect} />)}</MapContainer>
 }
 
 export function LocateMeButton({ onLocated, onError }: { onLocated: (center: [number, number]) => void; onError: (message: string) => void }) {

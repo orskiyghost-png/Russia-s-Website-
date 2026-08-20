@@ -167,13 +167,16 @@ function App() {
       </div>
     </header>
 
-    <AnimatePresence initial={false}><motion.aside className={`layer-rail glass-panel ${isMenuOpen ? 'open' : ''}`} initial={false} animate={{ x: isMenuOpen ? 0 : '-125%', opacity: isMenuOpen ? 1 : 0 }} transition={{ type: 'spring', damping: 25, stiffness: 200 }} aria-hidden={!isMenuOpen}>
-      <div className="rail-heading"><span>СЛОИ РАДАРА</span><button onClick={() => setIsMenuOpen(false)}><X size={15} /></button></div>
-      {layerConfig.map((layer) => { const LayerIcon = layer.icon; return <motion.button key={layer.id} whileTap={{ scale: 0.97 }} className={`layer-button ${activeLayer === layer.id ? 'active' : ''}`} onClick={() => { setActiveLayer(layer.id); setIsMenuOpen(false) }}><span className={`layer-symbol ${layer.color}`}><LayerIcon size={16} /></span><span>{layer.label}</span>{layer.id === 'all' && <b>{events.length}</b>}</motion.button> })}
-      <div className="rail-divider" />
-      <button className="layer-button" onClick={() => openReportAt()}><span className="layer-symbol lime"><Plus size={16} /></span><span>Добавить метку</span></button>
-      <div className="rail-footer"><div className="ai-badge"><Sparkles size={14} /><span><strong>PULSE AI</strong><small>42 источника онлайн</small></span></div><span className="connection-state"><i /> синхронизировано</span></div>
-    </motion.aside></AnimatePresence>
+    <AnimatePresence initial={false}>
+      {isMenuOpen && <motion.button className="drawer-backdrop" aria-label="Закрыть меню" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.22 }} onClick={() => setIsMenuOpen(false)} />}
+      <motion.aside className="layer-rail glass-panel" initial={{ x: '-108%', opacity: 0 }} animate={{ x: isMenuOpen ? 0 : '-108%', opacity: isMenuOpen ? 1 : 0 }} exit={{ x: '-108%', opacity: 0 }} transition={{ type: 'spring', stiffness: 360, damping: 32, mass: 0.72 }} aria-hidden={!isMenuOpen}>
+        <div className="rail-heading"><span>СЛОИ РАДАРА</span><button onClick={() => setIsMenuOpen(false)}><X size={15} /></button></div>
+        {layerConfig.map((layer) => { const LayerIcon = layer.icon; return <motion.button key={layer.id} whileTap={{ scale: 0.98 }} className={`layer-button ${activeLayer === layer.id ? 'active' : ''}`} onClick={() => { setActiveLayer(layer.id); setIsMenuOpen(false) }}><span className={`layer-symbol ${layer.color}`}><LayerIcon size={16} /></span><span>{layer.label}</span>{layer.id === 'all' && <b>{events.length}</b>}</motion.button> })}
+        <div className="rail-divider" />
+        <button className="layer-button" onClick={() => openReportAt()}><span className="layer-symbol lime"><Plus size={16} /></span><span>Добавить метку</span></button>
+        <div className="rail-footer"><div className="ai-badge"><Sparkles size={14} /><span><strong>PULSE AI</strong><small>42 источника онлайн</small></span></div><span className="connection-state"><i /> синхронизировано</span></div>
+      </motion.aside>
+    </AnimatePresence>
 
     <main className="map-stage">
       <CityMap center={center} events={filteredEvents} selectedId={selectedEvent?.id} theme={theme} onSelect={setSelectedEvent} onMapClick={openReportAt} />

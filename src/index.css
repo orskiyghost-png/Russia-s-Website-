@@ -291,3 +291,213 @@ html[data-theme='light'] .pulse-popup .leaflet-popup-tip { background:#fff; }
   .otp-cell { height:52px; font-size:18px; }
   .otp-actions { gap:2px 8px; }
 }
+
+
+/* PULSE production geometry and motion system */
+:root {
+  --motion-fast: 160ms;
+  --motion-standard: 220ms;
+  --motion-panel: 320ms;
+  --motion-modal: 360ms;
+  --motion-ease: cubic-bezier(.22, .8, .24, 1);
+}
+
+.pulse-app {
+  position: relative;
+  min-height: 100dvh;
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--surface-page);
+}
+
+.map-stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 100dvh;
+  overflow: hidden;
+  isolation: isolate;
+  background: #eef2f4;
+}
+
+.real-map,
+.map-stage > .leaflet-container {
+  position: absolute !important;
+  inset: 0 !important;
+  z-index: 0;
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 100% !important;
+  background: #eef2f4 !important;
+}
+
+.real-map .leaflet-tile-pane,
+.real-map .leaflet-map-pane,
+.real-map .leaflet-layer,
+.real-map .leaflet-tile-container {
+  width: 100%;
+}
+
+html[data-theme='light'] .real-map .leaflet-tile-pane,
+html[data-theme='dark'] .real-map .leaflet-tile-pane {
+  filter: none !important;
+}
+
+.map-vignette,
+.map-title-wash {
+  display: none !important;
+}
+
+.map-title-block {
+  z-index: 7;
+  text-shadow: none !important;
+}
+
+.map-title-block h1 {
+  color: #182532 !important;
+  text-shadow: 0 1px 1px rgba(255,255,255,.56) !important;
+  filter: none !important;
+}
+
+.map-title-block h1 em {
+  color: #557d1e;
+  font-style: normal;
+}
+
+.pulse-header {
+  z-index: 30;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  min-height: 58px;
+  height: 58px;
+  padding: 0 10px 0 14px;
+  gap: 12px;
+  top: max(10px, env(safe-area-inset-top));
+  left: 12px;
+  right: 12px;
+  transform: none !important;
+}
+
+.pulse-logo,
+.header-search-wrap,
+.header-actions,
+.header-icon-button,
+.mobile-menu-button,
+.login-button,
+.user-chip {
+  box-sizing: border-box;
+  align-self: center;
+}
+
+.pulse-logo {
+  display: inline-flex;
+  align-items: center;
+  height: 42px;
+  min-width: 0;
+  gap: 8px;
+  padding: 0;
+  line-height: 1;
+}
+
+.logo-word {
+  line-height: 1;
+  font-weight: 800;
+  letter-spacing: .14em;
+  text-shadow: none !important;
+}
+
+.header-search-wrap {
+  display: flex;
+  align-items: center;
+  height: 42px;
+  min-width: 0;
+  margin: 0;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  min-width: max-content;
+  height: 42px;
+}
+
+.header-icon-button,
+.mobile-menu-button,
+.login-button,
+.user-chip {
+  height: 42px;
+  min-height: 42px;
+  margin: 0;
+  border-radius: 13px;
+}
+
+.drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 34;
+  border: 0;
+  background: rgba(24,37,50,.18);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+
+.layer-rail {
+  z-index: 35;
+  will-change: transform, opacity;
+  transition: none !important;
+}
+
+.bottom-actions {
+  z-index: 20;
+  bottom: max(10px, env(safe-area-inset-bottom));
+}
+
+@media (max-width: 700px) {
+  .pulse-app { min-height: 100svh; height: 100svh; }
+  .map-stage { min-height: 100svh; height: 100svh; }
+  .pulse-header {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    height: 56px;
+    min-height: 56px;
+    padding: 0 8px 0 12px;
+    gap: 6px;
+    top: max(8px, env(safe-area-inset-top));
+    left: 10px;
+    right: 10px;
+    border-radius: 16px;
+  }
+  .pulse-logo { height: 40px; gap: 7px; }
+  .logo-orbit { width: 28px; height: 28px; }
+  .logo-word { font-size: 13px; letter-spacing: .13em; }
+  .header-search-wrap {
+    width: 40px;
+    height: 40px;
+    flex: 0 0 40px;
+    justify-content: center;
+    border-radius: 12px;
+  }
+  .header-search-wrap input,
+  .header-search-wrap kbd,
+  .header-search-wrap .search-status,
+  .header-search-wrap .search-result-label { display: none; }
+  .header-actions { height: 40px; gap: 5px; }
+  .live-indicator, .notification-button, .user-name, .user-chip svg { display: none; }
+  .header-icon-button, .mobile-menu-button, .login-button, .user-chip { height: 40px; min-height: 40px; }
+  .login-button { padding: 0 11px; border-radius: 12px; font-size: 11px; }
+  .mobile-menu-button { width: 40px; }
+  .map-title-block { top: 82px; left: 16px; right: 16px; }
+  .map-title-block h1 { max-width: 300px; font-size: clamp(29px, 8.2vw, 34px); line-height: .98; }
+  .map-title-block p { margin-bottom: 8px; }
+  .map-controls { top: 160px; }
+  .layer-rail { top: calc(max(8px, env(safe-area-inset-top)) + 64px); left: 10px; width: calc(100vw - 20px); max-height: calc(100svh - 144px); }
+  .event-strip { bottom: calc(70px + env(safe-area-inset-bottom)); }
+  .bottom-actions { bottom: max(8px, env(safe-area-inset-bottom)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drawer-backdrop { backdrop-filter: none; -webkit-backdrop-filter: none; }
+}

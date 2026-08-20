@@ -27,6 +27,10 @@ async function hydrateUser(sessionUser: SupabaseUser): Promise<AuthUser> {
 
 function validEmail(email: string) { return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim()) }
 
+function appRedirectUrl() {
+  return new URL(import.meta.env.BASE_URL || '/', window.location.origin).toString()
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null)
   const [loading, setLoading] = useState(true)
@@ -45,8 +49,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { data, error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type: 'email' })
       if (!error && data.session) await applySession(data.session)
       // Never leave a stale confirmation token in the address bar or send the user to a dead route.
-      const cleanUrl = `${window.location.pathname}${window.location.hash}`
-      window.history.replaceState({}, document.title, cleanUrl || '/')
+      const basePath = new URL(import.meta.env.BASE_URL || '/', window.location.origin).pathname
+      const cleanPath = window.location.pathname.startsWith(basePath) ? window.location.pathname : basePath
+      const cleanUrl = `${cleanPath}${window.location.hash}`
+      window.history.replaceState({}, document.title, cleanUrl || basePath)
     }
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       window.setTimeout(() => { void applySession(session) }, 0)
@@ -63,14 +69,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     login: async (email) => {
       if (!isSupabaseConfigured) return { error: 'Добавьте VITE_SUPABASE_URL и VITE_SUPABASE_ANON_KEY в Environment' }
       if (!validEmail(email)) return { error: 'Проверьте формат email' }
-      const { error } = await supabase.auth.signInWithOtp({ email: email.trim(), options: { shouldCreateUser: false, emailRedirectTo: window.location.origin } })
+      const { error } = await supabase.auth.signInWithOtp({ email: email.trim(), options: { shouldCreateUser: false, emailRedirectTo: appRedirectUrl() } })
       return error ? { error: translateAuthError(error.message) } : { error: null, needsVerification: true }
     },
     register: async (name, email) => {
       if (!isSupabaseConfigured) return { error: 'Добавьте VITE_SUPABASE_URL и VITE_SUPABASE_ANON_KEY в Environment' }
       if (name.trim().length < 2) return { error: 'Введите имя от 2 символов' }
       if (!validEmail(email)) return { error: 'Проверьте формат email' }
-      const { error } = await supabase.auth.signInWithOtp({ email: email.trim(), options: { shouldCreateUser: true, emailRedirectTo: window.location.origin, data: { name: name.trim() } } })
+      const { error } = await supabase.auth.signInWithOtp({ email: email.trim(), options: { shouldCreateUser: true, emailRedirectTo: appRedirectUrl(), data: { name: name.trim() } } })
       return error ? { error: translateAuthError(error.message) } : { error: null, needsVerification: true }
     },
     verifyOtp: async (email, token) => {
