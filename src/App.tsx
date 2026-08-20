@@ -11,6 +11,8 @@ import {
   ChevronRight,
   Clock3,
   Crosshair,
+  Globe2,
+  Apple,
   LogIn,
   LogOut,
   Map as MapIcon,
@@ -216,7 +218,7 @@ function EventSheet({ event, onClose, onReact }: { event: RadarEvent; onClose: (
 }
 
 function AuthModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
-  const { login, register, verifyOtp } = useAuth()
+  const { login, register, signInWithOAuth, verifyOtp } = useAuth()
   const [mode, setMode] = useState<'login' | 'register'>('login')
   const [step, setStep] = useState<'email' | 'otp'>('email')
   const [name, setName] = useState('')
@@ -225,12 +227,28 @@ function AuthModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () 
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [oauthLoading, setOauthLoading] = useState<'google' | 'apple' | null>(null)
+  const [resendCooldown, setResendCooldown] = useState(0)
   const inputs = useRef<Array<HTMLInputElement | null>>([])
+  useEffect(() => {
+    if (resendCooldown <= 0) return
+    const timer = window.setInterval(() => setResendCooldown((value) => Math.max(0, value - 1)), 1000)
+    return () => window.clearInterval(timer)
+  }, [resendCooldown])
+  const submitOAuth = async (provider: 'google' | 'apple') => {
+    if (oauthLoading) return
+    setError(''); setOauthLoading(provider)
+    const result = await signInWithOAuth(provider)
+    if (result.error) { setError(result.error); setOauthLoading(null) }
+  }
   const submitEmail = async () => {
+    if (submitting || resendCooldown > 0) return
+    const normalizedEmail = email.trim()
+    setEmail(normalizedEmail)
     setError(''); setNotice(''); setSubmitting(true)
-    const result = mode === 'login' ? await login(email) : await register(name, email)
+    const result = mode === 'login' ? await login(normalizedEmail) : await register(name, normalizedEmail)
     if (result.error) setError(result.error)
-    else { setStep('otp'); setNotice(`Код отправлен на ${email.trim()}`); window.setTimeout(() => inputs.current[0]?.focus(), 50) }
+    else { setStep('otp'); setResendCooldown(60); setNotice(`Код отправлен на ${normalizedEmail}`); window.setTimeout(() => inputs.current[0]?.focus(), 50) }
     setSubmitting(false)
   }
   const updateDigit = (index: number, value: string) => {
@@ -245,7 +263,7 @@ function AuthModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () 
     if (result.error) { setError(result.error); setDigits(['', '', '', '', '', '']); inputs.current[0]?.focus() } else onSuccess()
     setSubmitting(false)
   }
-  return <ModalFrame onClose={onClose}><div className="auth-modal"><div className="modal-orbit"><Sparkles size={19} /></div><p className="modal-overline">PULSE ACCOUNT / {step === 'otp' ? 'VERIFY' : 'ACCESS'}</p><h2>{step === 'otp' ? 'Введите код' : mode === 'login' ? 'С возвращением' : 'Присоединиться к городу'}<span>.</span></h2><p className="modal-subtitle">{step === 'otp' ? `Шесть цифр из письма для ${email.trim()}.` : mode === 'login' ? 'Войдите, чтобы сохранять места и добавлять сигналы.' : 'Создайте аккаунт и начните видеть свой город иначе.'}</p>{step === 'email' ? <><div className="auth-tabs"><button className={mode === 'login' ? 'active' : ''} onClick={() => { setMode('login'); setError('') }}>Войти</button><button className={mode === 'register' ? 'active' : ''} onClick={() => { setMode('register'); setError('') }}>Регистрация</button></div>{mode === 'register' && <label className="input-label">Имя<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Как к вам обращаться?" autoComplete="name" /></label>}<label className="input-label">Email<input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" type="email" autoComplete="email" /></label><button className="primary-action" disabled={submitting} onClick={() => { void submitEmail() }}>{submitting ? 'Отправляем…' : 'Получить 6-значный код'}<ArrowRight size={16} /></button></> : <><div className="otp-grid" role="group" aria-label="6-значный код">{digits.map((digit, index) => <input key={index} ref={(element) => { inputs.current[index] = element }} className="otp-cell" inputMode="numeric" maxLength={1} value={digit} onChange={(event) => updateDigit(index, event.target.value)} onKeyDown={(event) => { if (event.key === 'Backspace' && !digits[index] && index > 0) inputs.current[index - 1]?.focus() }} aria-label={`Цифра ${index + 1}`} />)}</div><button className="primary-action" disabled={submitting || digits.some((digit) => !digit)} onClick={() => { void submitCode() }}>{submitting ? 'Проверяем…' : 'Подтвердить код'}<Check size={16} /></button><button className="otp-resend" disabled={submitting} onClick={() => { setStep('email'); setDigits(['', '', '', '', '', '']); setNotice('') }}>Изменить email или отправить заново</button></>}{error && <p className="form-error">{error}</p>}{notice && <p className="form-notice">{notice}</p>}<p className="auth-disclaimer">PULSE использует одноразовый 6-значный код. Пароль и переходы по ссылкам не нужны.</p></div></ModalFrame>
+  return <ModalFrame onClose={onClose}><div className="auth-modal"><div className="modal-orbit"><Sparkles size={19} /></div><p className="modal-overline">PULSE ACCOUNT / {step === 'otp' ? 'VERIFY' : 'ACCESS'}</p><h2>{step === 'otp' ? 'Введите код' : mode === 'login' ? 'С возвращением' : 'Присоединиться к городу'}<span>.</span></h2><p className="modal-subtitle">{step === 'otp' ? `Шесть цифр из письма для ${email.trim()}.` : mode === 'login' ? 'Войдите, чтобы сохранять места и добавлять сигналы.' : 'Создайте аккаунт и начните видеть свой город иначе.'}</p>{step === 'email' ? <><div className="oauth-stack"><button className="oauth-button oauth-google" disabled={Boolean(oauthLoading)} onClick={() => { void submitOAuth('google') }}><Globe2 size={17} /><span>{oauthLoading === 'google' ? 'Открываем Google…' : 'Продолжить с Google'}</span></button><button className="oauth-button oauth-apple" disabled={Boolean(oauthLoading)} onClick={() => { void submitOAuth('apple') }}><Apple size={17} /><span>{oauthLoading === 'apple' ? 'Открываем Apple…' : 'Продолжить с Apple'}</span></button></div><div className="auth-divider"><span>или по email</span></div><div className="auth-tabs"><button className={mode === 'login' ? 'active' : ''} onClick={() => { setMode('login'); setError('') }}>Войти</button><button className={mode === 'register' ? 'active' : ''} onClick={() => { setMode('register'); setError('') }}>Регистрация</button></div>{mode === 'register' && <label className="input-label">Имя<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Как к вам обращаться?" autoComplete="name" /></label>}<label className="input-label">Email<input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" type="email" autoComplete="email" /></label><button className="primary-action" disabled={submitting} onClick={() => { void submitEmail() }}>{submitting ? 'Отправляем…' : 'Получить 6-значный код'}<ArrowRight size={16} /></button></> : <><div className="otp-grid" role="group" aria-label="6-значный код">{digits.map((digit, index) => <input key={index} ref={(element) => { inputs.current[index] = element }} className="otp-cell" inputMode="numeric" maxLength={1} value={digit} onChange={(event) => updateDigit(index, event.target.value)} onKeyDown={(event) => { if (event.key === 'Backspace' && !digits[index] && index > 0) inputs.current[index - 1]?.focus() }} aria-label={`Цифра ${index + 1}`} />)}</div><button className="primary-action" disabled={submitting || digits.some((digit) => !digit)} onClick={() => { void submitCode() }}>{submitting ? 'Проверяем…' : 'Подтвердить код'}<Check size={16} /></button><button className="otp-resend" disabled={submitting || resendCooldown > 0} onClick={() => { setStep('email'); setDigits(['', '', '', '', '', '']); setNotice('') }}>{resendCooldown > 0 ? `Повторная отправка через ${resendCooldown} с` : 'Изменить email или отправить заново'}</button></>}{error && <p className="form-error">{error}</p>}{notice && <p className="form-notice">{notice}</p>}<p className="auth-disclaimer">PULSE использует одноразовый 6-значный код. Пароль и переходы по ссылкам не нужны.</p></div></ModalFrame>
 }
 
 function ReportModal({ coords, onClose, onSubmit }: { coords: { lat: number; lng: number }; onClose: () => void; onSubmit: (payload: { kind: EventKind; title: string; description: string }) => void }) {
