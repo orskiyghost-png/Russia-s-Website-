@@ -344,10 +344,8 @@ html[data-theme='dark'] .real-map .leaflet-tile-pane {
   filter: none !important;
 }
 
-.map-vignette,
-.map-title-wash {
-  display: none !important;
-}
+.map-vignette { display: none !important; }
+.map-title-wash { display: block; }
 
 .map-title-block {
   z-index: 7;
@@ -531,3 +529,9 @@ html[data-theme='dark'] .real-map .leaflet-tile-pane {
   .auth-choice small { font-size:9px; }
 }
 
+
+
+.search-submit { display:grid; place-items:center; flex:0 0 34px; width:34px; height:34px; padding:0; border:0; background:transparent; color:var(--text-muted); cursor:pointer; border-radius:10px; transition:color .18s ease, background-color .18s ease, transform .18s ease; }
+.search-submit:hover { color:var(--text-strong); background:var(--surface-control-hover); }
+.search-submit:active { transform:scale(.94); }
+@media (max-width:700px) { .search-submit { width:40px; height:40px; flex-basis:40px; } }

@@ -74,13 +74,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const completeAuthCallback = async () => {
       const params = new URLSearchParams(window.location.search)
+      const code = params.get('code')
       const tokenHash = params.get('token_hash')
-      if (tokenHash) {
+      let exchanged = false
+      if (code) {
+        const { data } = await supabase.auth.exchangeCodeForSession(code)
+        if (data.session) { exchanged = true; await applySession(data.session) }
+      } else if (tokenHash) {
         const { data } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type: 'email' })
-        if (data.session) await applySession(data.session)
+        if (data.session) { exchanged = true; await applySession(data.session) }
+      }
+      if (exchanged) {
         const basePath = new URL(import.meta.env.BASE_URL || '/', window.location.origin).pathname
         const cleanPath = window.location.pathname.startsWith(basePath) ? window.location.pathname : basePath
-        window.history.replaceState({}, document.title, `${cleanPath}${window.location.hash}`)
+        window.history.replaceState({}, document.title, cleanPath)
       }
     }
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
