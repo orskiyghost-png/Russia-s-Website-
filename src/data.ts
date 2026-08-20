@@ -85,3 +85,10 @@ export function relativeTime(timestamp: number) {
   const hours = Math.floor(minutes / 60)
   return `${hours} ч назад`
 }
+
+
+export async function updateEventStats(id: string, changes: { reactions?: number; comments?: number }) {
+  if (!isSupabaseConfigured || id.startsWith('orsk-')) return
+  const { error } = await supabase.from('events').update(changes).eq('id', id)
+  if (error) throw error
+}

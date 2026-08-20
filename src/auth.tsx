@@ -11,7 +11,7 @@ type AuthContextValue = {
   login: (email: string, password: string, captchaToken: string) => Promise<AuthResult>
   register: (name: string, email: string, password: string, captchaToken: string) => Promise<AuthResult>
   signInAnonymously: () => Promise<AuthResult>
-  updateProfile: (updates: Partial<Pick<AuthUser, 'name' | 'city' | 'notifications'>>) => Promise<string | null>
+  updateProfile: (updates: Partial<Pick<AuthUser, 'name' | 'city' | 'notifications' | 'avatarUrl'>>) => Promise<string | null>
   logout: () => Promise<void>
 }
 

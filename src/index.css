@@ -544,3 +544,35 @@ html[data-theme='dark'] .real-map .leaflet-tile-pane {
 .captcha-missing { margin:10px 0 4px; padding:10px 12px; color:var(--amber); background:color-mix(in srgb, var(--amber) 12%, transparent); border:1px solid color-mix(in srgb, var(--amber) 28%, transparent); border-radius:10px; font-size:11px; line-height:1.4; }
 .guest-auth-button { margin-top:10px; }
 @media (max-width:700px) { .captcha-widget { transform-origin:left center; transform:scale(.9); width:111%; } }
+
+
+/* PULSE mobile interaction polish */
+.user-avatar img,.tiny-avatar img,.large-avatar img{width:100%;height:100%;display:block;object-fit:cover;border-radius:inherit}
+.user-avatar{overflow:hidden}
+.event-sheet{z-index:32;max-height:min(52vh,460px);overflow:auto;overscroll-behavior:contain}
+.sheet-react,.sheet-comments{min-height:34px;padding:0 11px;border:1px solid var(--line-soft);border-radius:999px;background:rgba(216,255,115,.08);color:var(--lime)}
+.sheet-comments{background:rgba(255,255,255,.055);color:var(--text-muted)}
+.comment-form{display:flex;align-items:center;gap:8px;margin-top:13px;padding:4px 5px 4px 12px;border:1px solid var(--line);border-radius:999px;background:rgba(255,255,255,.05)}
+.comment-form input{min-width:0;flex:1;border:0;outline:0;background:transparent;color:var(--text-main);font-size:11px}
+.comment-form input::placeholder{color:var(--text-muted)}
+.comment-form button{width:34px;height:34px;display:grid;place-items:center;border-radius:50%;background:var(--lime);color:#182015}
+.comment-form button:disabled{background:rgba(255,255,255,.1);color:var(--text-muted)}
+.profile-avatar-button{position:relative;width:82px;height:82px;padding:0;border:0;background:transparent;border-radius:50%;flex:0 0 auto}
+.profile-avatar-button .large-avatar{width:82px;height:82px;display:grid;place-items:center;border-radius:50%;overflow:hidden;font-size:24px}
+.avatar-edit-badge{position:absolute;right:-2px;bottom:0;width:28px;height:28px;display:grid;place-items:center;border:2px solid var(--surface-panel);border-radius:50%;background:var(--lime);color:#182015}
+.visually-hidden-file{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.avatar-hint{margin:-2px 0 16px;color:var(--text-muted);font-size:10px}
+.setting-toggle{width:100%;min-height:62px;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 13px;border:1px solid var(--control-border);border-radius:999px;background:var(--surface-control);color:var(--text-main);text-align:left}
+.setting-toggle>span{display:flex;align-items:center;gap:10px;min-width:0}.setting-toggle>span>span{display:flex;flex-direction:column;gap:3px}.setting-toggle strong{font-size:11px}.setting-toggle small{color:var(--text-muted);font-size:9px}
+.setting-toggle>i{width:42px;height:24px;display:flex;align-items:center;padding:3px;border-radius:999px;background:rgba(100,110,120,.32);flex:0 0 auto}.setting-toggle>i b{width:18px;height:18px;border-radius:50%;background:#69737f;transition:transform .18s ease,background .18s ease}.setting-toggle>i.on{background:rgba(216,255,115,.42)}.setting-toggle>i.on b{transform:translateX(18px);background:var(--lime)}
+.logout-action,.primary-action,.add-event-button,.login-button,.user-chip,.ai-fab{border-radius:999px!important}
+.notification-icon{border-radius:50%}
+@media (max-width:700px){
+  .event-strip{display:none}
+  .event-sheet{left:12px;right:12px;bottom:88px;width:auto;padding:15px 14px 13px;border-radius:24px;max-height:54vh}
+  .event-sheet h2{font-size:19px;margin:11px 0 6px}.sheet-meta{padding:10px 0;gap:8px;flex-wrap:wrap}.sheet-footer{padding-top:10px;gap:7px}.sheet-user{min-width:0;flex:1}.sheet-user{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.sheet-react,.sheet-comments{min-height:32px;padding:0 9px}
+  .comment-form{margin-top:10px}.comment-form input{font-size:16px}
+  .ai-fab{bottom:148px;right:14px;z-index:31}.ai-panel{right:10px;bottom:196px;width:calc(100vw - 20px);max-height:48vh;overflow:auto;border-radius:24px;z-index:44}
+  .profile-modal{max-height:calc(100dvh - 26px);overflow:auto}.profile-modal-header{gap:13px}.profile-actions{gap:8px}.profile-actions>*{flex:1;justify-content:center}.logout-action,.primary-action.compact{min-height:46px}
+  .setting-toggle{min-height:68px}.notification-row{border-radius:22px}
+}

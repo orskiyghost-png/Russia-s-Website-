@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import * as Dialog from '@radix-ui/react-dialog'
 import {
@@ -35,7 +35,7 @@ import { CityMap, LocateMeButton } from './CityMap'
 import { useAuth } from './auth'
 import { Captcha } from './Captcha'
 
-import { DEFAULT_CENTER, createEvent as createServerEvent, fetchEvents, kindConfig, layerConfig, relativeTime, subscribeToEvents, eventLayer } from './data'
+import { DEFAULT_CENTER, createEvent as createServerEvent, fetchEvents, kindConfig, layerConfig, relativeTime, subscribeToEvents, eventLayer, updateEventStats } from './data'
 
 import type { EventKind, Layer, RadarEvent } from './types'
 
@@ -91,6 +91,27 @@ function App() {
   const notify = (message: string, tone: Toast['tone'] = 'success') => {
     setToast({ message, tone })
     window.setTimeout(() => setToast(null), 3000)
+  }
+
+  const selectEvent = (event: RadarEvent) => {
+    setSelectedEvent(event)
+    setIsAiOpen(false)
+  }
+
+  const reactToEvent = async (event: RadarEvent) => {
+    const next = { ...event, reactions: event.reactions + 1 }
+    setEvents((current) => current.map((item) => item.id === event.id ? next : item))
+    setSelectedEvent((current) => current?.id === event.id ? next : current)
+    notify('Лайк сохранён')
+    try { await updateEventStats(event.id, { reactions: next.reactions }) } catch { /* local optimistic state remains visible */ }
+  }
+
+  const commentOnEvent = async (event: RadarEvent, text: string) => {
+    const next = { ...event, comments: event.comments + 1 }
+    setEvents((current) => current.map((item) => item.id === event.id ? next : item))
+    setSelectedEvent((current) => current?.id === event.id ? next : current)
+    notify('Комментарий добавлен')
+    try { await updateEventStats(event.id, { comments: next.comments }) } catch { /* local optimistic state remains visible */ }
   }
 
   useEffect(() => {
@@ -204,7 +225,7 @@ function App() {
       <div className="header-actions">
         <span className="live-indicator"><i /> live</span>
         <button className="header-icon-button notification-button" onClick={() => setIsNotificationsOpen(true)} aria-label="Уведомления"><Bell size={17} /><span className="unread-dot" /></button>
-        {user && !user.isAnonymous ? <button className="user-chip" onClick={() => setIsProfileOpen(true)}><span className="user-avatar">{initials(user.name)}</span><span className="user-name">{user.name}</span><ChevronDown size={14} /></button> : user ? <button className="login-button guest-chip" onClick={() => setIsAuthOpen(true)}><UserRound size={15} /> Гость</button> : <button className="login-button" onClick={() => setIsAuthOpen(true)}><LogIn size={15} /> Войти</button>}
+        {user && !user.isAnonymous ? <button className="user-chip" onClick={() => setIsProfileOpen(true)}><span className="user-avatar">{user.avatarUrl ? <img src={user.avatarUrl} alt="" /> : initials(user.name)}</span><span className="user-name">{user.name}</span><ChevronDown size={14} /></button> : user ? <button className="login-button guest-chip" onClick={() => setIsAuthOpen(true)}><UserRound size={15} /> Гость</button> : <button className="login-button" onClick={() => setIsAuthOpen(true)}><LogIn size={15} /> Войти</button>}
         <button className="mobile-menu-button header-icon-button" onClick={() => setIsMenuOpen((value) => !value)} aria-label="Открыть меню"><Menu size={18} /></button>
       </div>
     </header>
@@ -212,7 +233,7 @@ function App() {
     <AnimatePresence initial={false}>
       {isMenuOpen && <motion.button className="drawer-backdrop" aria-label="Закрыть меню" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.22 }} onClick={() => setIsMenuOpen(false)} />}
       <motion.aside className="layer-rail glass-panel" initial={{ x: '-108%', opacity: 0 }} animate={{ x: isMenuOpen ? 0 : '-108%', opacity: isMenuOpen ? 1 : 0 }} exit={{ x: '-108%', opacity: 0 }} transition={{ type: 'spring', stiffness: 360, damping: 32, mass: 0.72 }} aria-hidden={!isMenuOpen}>
-        <div className="rail-heading"><span>СЛОИ РАДАРА</span><button onClick={() => setIsMenuOpen(false)}><X size={15} /></button></div>
+        <div className="rail-heading"><span>КАТЕГОРИИ</span><button onClick={() => setIsMenuOpen(false)}><X size={15} /></button></div>
         {layerConfig.map((layer) => { const LayerIcon = layer.icon; return <motion.button key={layer.id} whileTap={{ scale: 0.98 }} className={`layer-button ${activeLayer === layer.id ? 'active' : ''}`} onClick={() => { setActiveLayer(layer.id); setIsMenuOpen(false) }}><span className={`layer-symbol ${layer.color}`}><LayerIcon size={16} /></span><span>{layer.label}</span>{layer.id === 'all' && <b>{events.length}</b>}</motion.button> })}
         <div className="rail-divider" />
         <button className="layer-button" onClick={() => openReportAt()}><span className="layer-symbol lime"><Plus size={16} /></span><span>Добавить метку</span></button>
@@ -221,18 +242,18 @@ function App() {
     </AnimatePresence>
 
     <main className="map-stage">
-      <CityMap center={center} events={filteredEvents} selectedId={selectedEvent?.id} theme={theme} onSelect={setSelectedEvent} onMapClick={openReportAt} />
+      <CityMap center={center} events={filteredEvents} selectedId={selectedEvent?.id} theme={theme} onSelect={selectEvent} onMapClick={openReportAt} />
       {(eventsLoading || searching || authLoading) && <MapSkeleton label={searching ? 'Ищем город…' : 'Синхронизируем радар…'} />}
       <div className="map-vignette" />
       <div className="map-title-wash" aria-hidden="true" />
       <div className="map-title-block"><p>ОРСК · ОБНОВЛЕНО ТОЛЬКО ЧТО</p><h1>Город в реальном <em>времени</em></h1><span><Users size={13} /> {events.length} сигналов в радиусе 2 км</span></div>
       <div className="map-controls glass-panel"><LocateMeButton onLocated={(location) => { setCenter(location); notify('Карта центрирована на вас') }} onError={(message) => notify(message, 'error')} /><button className="map-floating-control" onClick={() => setCenter(DEFAULT_CENTER)} title="Вернуться к Орску" aria-label="Вернуться к Орску"><Navigation size={16} /></button></div>
-      <button className="ai-fab glass-panel" onClick={() => setIsAiOpen((value) => !value)} aria-label="Открыть PULSE AI"><Bot size={18} /><span>PULSE AI</span></button>
+      {!selectedEvent && <button className="ai-fab glass-panel" onClick={() => setIsAiOpen((value) => !value)} aria-label="Открыть PULSE AI"><Bot size={18} /><span>PULSE AI</span></button>}
 
-      <AnimatePresence>{selectedEvent && <EventSheet event={selectedEvent} onClose={() => setSelectedEvent(null)} onReact={() => notify('Реакция сохранена')} />}</AnimatePresence>
+      <AnimatePresence>{selectedEvent && <EventSheet event={selectedEvent} onClose={() => setSelectedEvent(null)} onReact={() => { void reactToEvent(selectedEvent) }} onComment={(text) => { void commentOnEvent(selectedEvent, text) }} />}</AnimatePresence>
       <motion.div className="event-strip" initial={{ y: 18, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={spring}>
         <div className="strip-heading"><span><Activity size={14} /> В ЭФИРЕ</span><b>{filteredEvents.length} событий</b></div>
-        <div className="strip-list">{filteredEvents.slice(0, 4).map((event) => <MiniEvent key={event.id} event={event} selected={event.id === selectedEvent?.id} onClick={() => setSelectedEvent(event)} />)}</div>
+        <div className="strip-list">{filteredEvents.slice(0, 4).map((event) => <MiniEvent key={event.id} event={event} selected={event.id === selectedEvent?.id} onClick={() => selectEvent(event)} />)}</div>
       </motion.div>
     </main>    {!configured && <div className="backend-banner glass-panel"><Zap size={14} /><span>Локальный режим: подключите Supabase, чтобы включить общие события и Email OTP</span><button onClick={() => setIsAuthOpen(true)}>Настроить <ArrowRight size={13} /></button></div>}
     <div className="bottom-actions glass-panel"><button onClick={() => openReportAt()} className="add-event-button"><Plus size={17} /> Создать сигнал <kbd>⌘ N</kbd></button><span className="desktop-only-hint"><Crosshair size={13} /> Нажмите на карту, чтобы поставить метку в Орске</span></div>
@@ -252,10 +273,12 @@ function MiniEvent({ event, selected, onClick }: { event: RadarEvent; selected: 
   return <motion.button className={`mini-event ${selected ? 'selected' : ''} ${isHot ? 'hot' : ''}`} onClick={onClick} initial={{ opacity: 0, y: 7 }} animate={{ opacity: 1, y: 0 }} transition={{ ...spring, duration: .45 }} whileTap={{ scale: .98 }}><span className={`mini-event-icon ${config.color}`}><Icon size={15} /></span><span className="mini-event-copy"><strong>{event.title}</strong><small><MapPin size={11} /> {event.location}</small></span><span className="mini-event-time">{relativeTime(event.createdAt)}</span><ChevronRight size={14} /></motion.button>
 }
 
-function EventSheet({ event, onClose, onReact }: { event: RadarEvent; onClose: () => void; onReact: () => void }) {
+function EventSheet({ event, onClose, onReact, onComment }: { event: RadarEvent; onClose: () => void; onReact: () => void; onComment: (text: string) => void }) {
   const config = kindConfig[event.kind]
   const Icon = config.icon
-  return <motion.aside className="event-sheet glass-panel" initial={{ opacity: 0, y: 28, scale: .98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 18, scale: .98 }} transition={spring}><div className="sheet-top"><span className={`event-tag ${config.color}`}><Icon size={13} /> {event.category}</span><button className="sheet-close" onClick={onClose}><X size={16} /></button></div><h2>{event.title}</h2><p className="sheet-description">{event.description}</p><div className="sheet-meta"><span><MapPin size={13} /> {event.location}</span><span><Clock3 size={13} /> {relativeTime(event.createdAt)}</span></div><div className="sheet-footer"><span className="sheet-user"><span className="tiny-avatar">{event.avatarUrl ? <img src={event.avatarUrl} alt="" /> : initials(event.userName)}</span>{event.userName}</span><button className="sheet-react" onClick={onReact}><ThumbsUp size={14} /> {event.reactions}</button><span className="sheet-comments"><MessageCircle size={14} /> {event.comments}</span></div></motion.aside>
+  const [comment, setComment] = useState('')
+  const submitComment = () => { const value = comment.trim(); if (!value) return; onComment(value); setComment('') }
+  return <motion.aside className="event-sheet glass-panel" initial={{ opacity: 0, y: 28, scale: .98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 18, scale: .98 }} transition={spring}><div className="sheet-top"><span className={`event-tag ${config.color}`}><Icon size={13} /> {event.category}</span><button className="sheet-close" onClick={onClose} aria-label="Закрыть сигнал"><X size={16} /></button></div><h2>{event.title}</h2><p className="sheet-description">{event.description}</p><div className="sheet-meta"><span><MapPin size={13} /> {event.location}</span><span><Clock3 size={13} /> {relativeTime(event.createdAt)}</span></div><div className="sheet-footer"><span className="sheet-user"><span className="tiny-avatar">{event.avatarUrl ? <img src={event.avatarUrl} alt="" /> : initials(event.userName)}</span>{event.userName}</span><button className="sheet-react" onClick={onReact} aria-label="Поставить лайк"><ThumbsUp size={14} /> {event.reactions}</button><span className="sheet-comments"><MessageCircle size={14} /> {event.comments}</span></div><form className="comment-form" onSubmit={(event) => { event.preventDefault(); submitComment() }}><input className="text-[16px]" value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Написать комментарий…" aria-label="Комментарий" /><button type="submit" disabled={!comment.trim()} aria-label="Добавить комментарий"><Send size={14} /></button></form></motion.aside>
 }
 
 function AuthModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
@@ -314,12 +337,24 @@ function ProfileModal({ onClose }: { onClose: () => void }) {
   const [name, setName] = useState(user?.name ?? '')
   const [city, setCity] = useState(user?.city ?? 'Орск')
   const [notifications, setNotifications] = useState(user?.notifications ?? true)
+  const [avatarPreview, setAvatarPreview] = useState(user?.avatarUrl ?? '')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
+  const avatarInput = useRef<HTMLInputElement | null>(null)
   if (!user) return null
-  const save = async () => { setSaving(true); const result = await updateProfile({ name: name.trim() || user.name, city, notifications }); if (result) setError(result); else onClose(); setSaving(false) }
-  return <ModalFrame onClose={onClose}><div className="profile-modal"><div className="profile-modal-header"><div className="large-avatar">{user.avatarUrl ? <img src={user.avatarUrl} alt="" /> : initials(user.name)}</div><div><p className="modal-overline">МОЙ PULSE</p><h2>{user.name}<span>.</span></h2><span className="profile-email">{user.email}</span></div></div><div className="profile-form"><label className="input-label">Ваше имя<input className="text-[16px]" value={name} onChange={(event) => setName(event.target.value)} /></label><label className="input-label">Родной город<div className="select-wrap"><Navigation size={15} /><select className="text-[16px]" value={city} onChange={(event) => setCity(event.target.value)}><option>Орск</option><option>Москва</option><option>Санкт-Петербург</option><option>Екатеринбург</option><option>Казань</option></select><ChevronDown size={14} /></div></label><button className="setting-toggle" onClick={() => setNotifications((value) => !value)}><span><Bell size={16} /><span><strong>Уведомления рядом</strong><small>Получать важные сигналы в вашем городе</small></span></span><i className={notifications ? 'on' : ''}><b /></i></button></div>{error && <p className="form-error">{error}</p>}<div className="profile-actions"><button className="logout-action" onClick={() => { void logout(); onClose() }}><LogOut size={15} /> Выйти</button><button className="primary-action compact" disabled={saving} onClick={() => { void save() }}>{saving ? 'Сохраняем…' : 'Сохранить'} <Check size={15} /></button></div></div></ModalFrame>
-}
+  const handleAvatar = (file?: File) => {
+    if (!file || !file.type.startsWith('image/')) { setError('Выберите изображение из галереи'); return }
+    const reader = new FileReader()
+    reader.onload = () => {
+      const image = new Image()
+      image.onload = () => { const size = 256; const canvas = document.createElement('canvas'); canvas.width = size; canvas.height = size; const context = canvas.getContext('2d'); if (!context) return; const scale = Math.max(size / image.width, size / image.height); const width = image.width * scale; const height = image.height * scale; context.drawImage(image, (size - width) / 2, (size - height) / 2, width, height); setAvatarPreview(canvas.toDataURL('image/jpeg', .84)) }
+      image.src = String(reader.result)
+    }
+    reader.readAsDataURL(file)
+  }
+  const save = async () => { setSaving(true); const result = await updateProfile({ name: name.trim() || user.name, city, notifications, avatarUrl: avatarPreview || null }); if (result) setError(result); else onClose(); setSaving(false) }
+  return <ModalFrame onClose={onClose}><div className="profile-modal"><div className="profile-modal-header"><button className="profile-avatar-button" onClick={() => avatarInput.current?.click()} aria-label="Изменить аватар"><span className="large-avatar">{avatarPreview ? <img src={avatarPreview} alt="Аватар" /> : initials(user.name)}</span><span className="avatar-edit-badge"><Plus size={13} /></span></button><input ref={avatarInput} className="visually-hidden-file" type="file" accept="image/*" onChange={(event) => handleAvatar(event.target.files?.[0])} /><div><p className="modal-overline">МОЙ PULSE</p><h2>{user.name}<span>.</span></h2><span className="profile-email">{user.email}</span></div></div><p className="avatar-hint">Нажмите на аватар, чтобы выбрать фото из галереи</p><div className="profile-form"><label className="input-label">Ваше имя<input className="text-[16px]" value={name} onChange={(event) => setName(event.target.value)} /></label><label className="input-label">Родной город<div className="select-wrap"><Navigation size={15} /><select className="text-[16px]" value={city} onChange={(event) => setCity(event.target.value)}><option>Орск</option><option>Москва</option><option>Санкт-Петербург</option><option>Екатеринбург</option><option>Казань</option></select><ChevronDown size={14} /></div></label><button className="setting-toggle" onClick={() => setNotifications((value) => !value)}><span><Bell size={16} /><span><strong>Уведомления рядом</strong><small>Получать важные сигналы в вашем городе</small></span></span><i className={notifications ? 'on' : ''}><b /></i></button></div>{error && <p className="form-error">{error}</p>}<div className="profile-actions"><button className="logout-action" onClick={() => { void logout(); onClose() }}><LogOut size={15} /> Выйти</button><button className="primary-action compact" disabled={saving} onClick={() => { void save() }}>{saving ? 'Сохраняем…' : 'Сохранить'} <Check size={15} /></button></div></div></ModalFrame>
+  }
 
 function PulseAiPanel({ events, onClose }: { events: RadarEvent[]; onClose: () => void }) {
   const [typed, setTyped] = useState('')
