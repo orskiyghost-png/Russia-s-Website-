@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { useTheme } from './theme'
 
 type TurnstileWidget = { reset: (widgetId?: string) => void }
 type TurnstileApi = { render: (element: HTMLElement, options: { sitekey: string; theme: 'light' | 'dark'; callback: (token: string) => void; 'expired-callback': () => void; 'error-callback': () => void }) => string; reset: (widgetId?: string) => void }
@@ -34,22 +35,29 @@ export function Captcha({ onToken, onError }: { onToken: (token: string) => void
   const hostRef = useRef<HTMLDivElement | null>(null)
   const widgetRef = useRef<string | null>(null)
   const siteKey = captchaSiteKey()
+  const { theme } = useTheme()
 
   useEffect(() => {
     if (!siteKey || !hostRef.current) return
     let cancelled = false
+    hostRef.current.replaceChildren()
     void loadTurnstile().then(() => {
       if (cancelled || !hostRef.current || !window.turnstile) return
-      widgetRef.current = window.turnstile.render(hostRef.current, {
-        sitekey: siteKey,
-        theme: document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light',
-        callback: onToken,
-        'expired-callback': () => onToken(''),
-        'error-callback': () => { onToken(''); onError?.('CAPTCHA временно недоступна. Обновите проверку.') },
-      })
-    }).catch(() => onError?.('Не удалось загрузить CAPTCHA. Проверьте подключение.'))
+      try {
+        widgetRef.current = window.turnstile.render(hostRef.current, {
+          sitekey: siteKey,
+          theme,
+          callback: onToken,
+          'expired-callback': () => onToken(''),
+          'error-callback': () => { onToken(''); onError?.('CAPTCHA не прошла проверку. Обновите страницу и попробуйте ещё раз.') },
+        })
+      } catch {
+        onToken('')
+        onError?.('Не удалось отобразить CAPTCHA. Проверьте, что Site Key настроен правильно.')
+      }
+    }).catch(() => onError?.('Не удалось загрузить CAPTCHA. Проверьте подключение к интернету.'))
     return () => { cancelled = true; widgetRef.current = null }
-  }, [onError, onToken, siteKey])
+  }, [onError, onToken, siteKey, theme])
 
   if (!siteKey) return <p className="captcha-missing">Для отправки формы нужно настроить `VITE_TURNSTILE_SITE_KEY`.</p>
   return <div ref={hostRef} className="captcha-widget" aria-label="Проверка CAPTCHA" />

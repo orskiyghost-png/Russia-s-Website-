@@ -4,8 +4,8 @@
   "description": "События, вайб и помощь рядом.",
   "start_url": "./",
   "display": "standalone",
-  "background_color": "#eef2f4",
-  "theme_color": "#f7f8fa",
+  "background_color": "#05070c",
+  "theme_color": "#0d131c",
   "lang": "ru",
   "icons": [{
     "src": "./icon.svg",

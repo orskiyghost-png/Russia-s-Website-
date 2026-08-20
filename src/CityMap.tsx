@@ -1,5 +1,5 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
-import { MapContainer, Marker, Popup, TileLayer, useMap, useMapEvents, ZoomControl } from 'react-leaflet'
+import { AttributionControl, MapContainer, Marker, Popup, TileLayer, useMap, useMapEvents, ZoomControl } from 'react-leaflet'
 import L, { type LatLngExpression } from 'leaflet'
 import { Crosshair } from 'lucide-react'
 import type { RadarEvent } from './types'
@@ -13,6 +13,24 @@ type CityMapProps = {
   theme: Theme
   onSelect: (event: RadarEvent) => void
   onMapClick: (coords: { lat: number; lng: number }) => void
+}
+
+function TileFallback({ onFallback }: { onFallback: () => void }) {
+  const map = useMap()
+  const triggered = useRef(false)
+  useEffect(() => {
+    let errors = 0
+    const handler = () => {
+      errors += 1
+      if (!triggered.current && errors >= 4) {
+        triggered.current = true
+        onFallback()
+      }
+    }
+    map.on('tileerror', handler)
+    return () => { map.off('tileerror', handler) }
+  }, [map, onFallback])
+  return null
 }
 
 function MapLayoutSync() {
@@ -125,8 +143,11 @@ function ClusteredMarkers({ events, selectedId, onSelect }: { events: RadarEvent
 }
 
 export function CityMap({ center, events, selectedId, theme, onSelect, onMapClick }: CityMapProps) {
-  const tileUrl = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
-  return <MapContainer center={center as LatLngExpression} zoom={12} minZoom={3} maxZoom={19} zoomControl={false} attributionControl={false} scrollWheelZoom preferCanvas className="real-map"><TileLayer url={tileUrl} updateWhenIdle updateWhenZooming={false} keepBuffer={2} crossOrigin /><ZoomControl position="bottomright" /><MapLayoutSync /><MapViewport center={center} /><MapClickCapture onMapClick={onMapClick} /><ClusteredMarkers events={events} selectedId={selectedId} onSelect={onSelect} /></MapContainer>
+  const [tileSource, setTileSource] = useState<'carto' | 'osm'>('carto')
+  const tileUrl = tileSource === 'carto'
+    ? (theme === 'dark' ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png' : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png')
+    : 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
+  return <MapContainer center={center as LatLngExpression} zoom={12} minZoom={3} maxZoom={19} zoomControl={false} scrollWheelZoom preferCanvas className="real-map"><TileLayer key={tileUrl} url={tileUrl} attribution="&copy; OpenStreetMap contributors" updateWhenIdle updateWhenZooming={false} keepBuffer={2} crossOrigin /><ZoomControl position="bottomright" /><AttributionControl position="bottomright" prefix={false} /><TileFallback onFallback={() => setTileSource('osm')} /><MapLayoutSync /><MapViewport center={center} /><MapClickCapture onMapClick={onMapClick} /><ClusteredMarkers events={events} selectedId={selectedId} onSelect={onSelect} /></MapContainer>
 }
 
 export function LocateMeButton({ onLocated, onError }: { onLocated: (center: [number, number]) => void; onError: (message: string) => void }) {

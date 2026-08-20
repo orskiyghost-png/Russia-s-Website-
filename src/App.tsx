@@ -37,6 +37,7 @@ import {
 import { CityMap, LocateMeButton } from './CityMap'
 import { useAuth } from './auth'
 import { Captcha } from './Captcha'
+import { useTheme } from './theme'
 
 import { DEFAULT_CENTER, addComment, createEvent as createServerEvent, eventLayer, fetchComments, fetchDirectMessages, fetchEvents, fetchOpenReports, kindConfig, layerConfig, relativeTime, reportEvent, reverseGeocode, sendDirectMessage, setEventModerationStatus, subscribeToEvents, toggleReaction } from './data'
 
@@ -65,8 +66,7 @@ type Toast = { message: string; tone?: 'error' | 'success' }
 
 function App() {
   const { user, loading: authLoading, configured } = useAuth()
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => { try { return (localStorage.getItem('pulse-theme') as 'light' | 'dark') || 'light' } catch { return 'light' } })
-  useEffect(() => { document.documentElement.dataset.theme = theme; try { localStorage.setItem('pulse-theme', theme) } catch { /* storage may be disabled */ } }, [theme])
+  const { theme, toggleTheme } = useTheme()
   const [events, setEvents] = useState<RadarEvent[]>([])
   const [eventsLoading, setEventsLoading] = useState(true)
   const [savingEvent, setSavingEvent] = useState(false)
@@ -275,7 +275,7 @@ function App() {
       </div>
       <div className="header-actions">
         <span className="live-indicator"><i /> В эфире</span>
-        <button className="header-icon-button theme-toggle" onClick={() => setTheme((value) => value === 'light' ? 'dark' : 'light')} aria-label={theme === 'light' ? 'Включить тёмную тему' : 'Включить светлую тему'} title={theme === 'light' ? 'Тёмная тема' : 'Светлая тема'}>{theme === 'light' ? <Moon size={17} /> : <Sun size={17} />}</button>
+        <button className="header-icon-button theme-toggle" onClick={toggleTheme} aria-label={theme === 'light' ? 'Включить тёмную тему' : 'Включить светлую тему'} title={theme === 'light' ? 'Тёмная тема' : 'Светлая тема'}>{theme === 'light' ? <Moon size={17} /> : <Sun size={17} />}</button>
         <button className="header-icon-button notification-button" onClick={() => setIsNotificationsOpen(true)} aria-label="Уведомления"><Bell size={17} /><span className="unread-dot" /></button>
         {user && !user.isAnonymous ? <button className="user-chip" onClick={() => setIsProfileOpen(true)}><span className="user-avatar">{user.avatarUrl ? <img src={user.avatarUrl} alt="" /> : initials(user.name)}</span><span className="user-name">{user.name}</span><ChevronDown size={14} /></button> : user ? <button className="login-button guest-chip" onClick={() => setIsAuthOpen(true)}><UserRound size={15} /> Гость</button> : <button className="login-button" onClick={() => setIsAuthOpen(true)}><LogIn size={15} /> Войти</button>}
         <button className="mobile-menu-button header-icon-button" onClick={() => setIsMenuOpen((value) => !value)} aria-label="Открыть меню"><Menu size={18} /></button>
