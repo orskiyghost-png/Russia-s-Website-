@@ -29,5 +29,5 @@ export type AuthUser = {
   avatarUrl?: string | null
   createdAt: number
   isAnonymous: boolean
-  authProvider: 'google' | 'email' | 'anonymous' | 'unknown'
+  authProvider: 'email' | 'anonymous' | 'unknown'
 }

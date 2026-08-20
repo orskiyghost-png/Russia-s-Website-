@@ -42,7 +42,7 @@ function MapViewport({ center }: { center: [number, number] }) {
     const [previousLat, previousLng] = lastCenter.current
     if (Math.abs(lat - previousLat) < 0.000001 && Math.abs(lng - previousLng) < 0.000001) return
     lastCenter.current = center
-    map.flyTo(center, Math.max(map.getZoom(), 12), { duration: 0.72, easeLinearity: 0.22 })
+    map.flyTo(center, 13, { duration: 0.72, easeLinearity: 0.22 })
   }, [center, map])
   return null
 }

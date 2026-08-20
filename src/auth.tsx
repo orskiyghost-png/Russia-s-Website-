@@ -12,7 +12,6 @@ type AuthContextValue = {
   login: (email: string) => Promise<AuthResult>
   register: (name: string, email: string) => Promise<AuthResult>
   verifyOtp: (email: string, token: string) => Promise<VerifyResult>
-  signInWithGoogle: () => Promise<{ error: string | null }>
   signInAnonymously: () => Promise<{ error: string | null }>
   updateProfile: (updates: Partial<Pick<AuthUser, 'name' | 'city' | 'notifications'>>) => Promise<string | null>
   logout: () => Promise<void>
@@ -36,7 +35,6 @@ function isAnonymousUser(sessionUser: SupabaseUser) {
 function authProviderFor(sessionUser: SupabaseUser): AuthUser['authProvider'] {
   if (isAnonymousUser(sessionUser)) return 'anonymous'
   const provider = sessionUser.app_metadata?.provider ?? sessionUser.identities?.[0]?.provider
-  if (provider === 'google') return 'google'
   if (provider === 'email') return 'email'
   return 'unknown'
 }
@@ -129,14 +127,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { error } = await supabase.auth.verifyOtp({ email: email.trim(), token: token.trim(), type: 'email' })
       return error ? { error: translateAuthError(error.message) } : { error: null }
     },
-    signInWithGoogle: async () => {
-      if (!isSupabaseConfigured) return { error: 'Supabase не настроен' }
-      const options = { redirectTo: appRedirectUrl(), queryParams: { access_type: 'offline', prompt: 'select_account' } }
-      const result = user?.isAnonymous
-        ? await supabase.auth.linkIdentity({ provider: 'google', options })
-        : await supabase.auth.signInWithOAuth({ provider: 'google', options })
-      return { error: result.error ? translateAuthError(result.error.message) : null }
-    },
     signInAnonymously: async () => {
       if (!isSupabaseConfigured) return { error: 'Supabase не настроен' }
       const { error } = await supabase.auth.signInAnonymously()
@@ -160,8 +150,8 @@ function translateAuthError(message: string) {
   if (normalized.includes('invalid') && normalized.includes('token')) return 'Код истёк или введён неверно. Запросите новый код'
   if (normalized.includes('expired')) return 'Срок действия кода истёк. Запросите новый код'
   if (normalized.includes('email not confirmed')) return 'Подтвердите email кодом из письма'
-  if (normalized.includes('email rate limit') || normalized.includes('rate limit') || normalized.includes('too many') || normalized.includes('over_email')) return 'Сейчас временно недоступна отправка писем. Попробуйте войти через Google.'
-  if (normalized.includes('anonymous')) return 'Временная сессия сейчас недоступна. Продолжите как гость или войдите через Google.'
+  if (normalized.includes('email rate limit') || normalized.includes('rate limit') || normalized.includes('too many') || normalized.includes('over_email')) return 'Сейчас временно недоступна отправка писем. Попробуйте ещё раз позже.'
+  if (normalized.includes('anonymous')) return 'Временная гостевая сессия сейчас недоступна. Попробуйте ещё раз позже.'
   if (normalized.includes('user not found')) return 'Пользователь не найден. Выберите регистрацию'
   if (normalized.includes('signups not allowed')) return 'Регистрация отключена в настройках Supabase'
   return message

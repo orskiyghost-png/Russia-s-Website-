@@ -141,7 +141,7 @@ function App() {
   const openReportAt = (coords?: { lat: number; lng: number }) => {
     if (!user || user.isAnonymous) {
       setIsAuthOpen(true)
-      notify(user?.isAnonymous ? 'Чтобы сохранить сигнал за аккаунтом, выберите Google или Email OTP' : 'Войдите, чтобы добавлять события', 'error')
+      notify(user?.isAnonymous ? 'Чтобы сохранить сигнал за аккаунтом, выберите Email OTP' : 'Войдите, чтобы добавлять события', 'error')
       return
     }
     setPendingCoords(coords ?? { lat: center[0], lng: center[1] })
@@ -162,7 +162,7 @@ function App() {
       notify('Событие опубликовано для всех жителей')
     } catch (error) {
       const message = error instanceof Error ? error.message : ''
-      notify(message.includes('RATE_LIMIT') ? 'Лимит: максимум 5 меток за 10 минут' : message.includes('PERMANENT_ACCOUNT_REQUIRED') ? 'Для сигнала нужен Google или Email OTP аккаунт' : 'Не удалось сохранить событие', 'error')
+      notify(message.includes('RATE_LIMIT') ? 'Лимит: максимум 5 меток за 10 минут' : message.includes('PERMANENT_ACCOUNT_REQUIRED') ? 'Для сигнала нужен постоянный Email OTP аккаунт' : 'Не удалось сохранить событие', 'error')
     } finally {
       setSavingEvent(false)
     }
@@ -178,7 +178,7 @@ function App() {
         <button className="search-submit" onClick={() => { void searchCity() }} aria-label="Искать"><Search size={16} /></button>
         <input className="text-[16px]" value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void searchCity() }} placeholder="Найти город или событие" aria-label="Поиск города" />
 
-        {searching && <span className="search-status">ищем…</span>}
+        {searching && <span className="search-status"><i className="search-spinner" /> ищем…</span>}
         <kbd>⌘ K</kbd>
         {searchMessage && <span className="search-result-label">{searchMessage}</span>}
       </div>
@@ -240,7 +240,7 @@ function EventSheet({ event, onClose, onReact }: { event: RadarEvent; onClose: (
 }
 
 function AuthModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
-  const { login, register, verifyOtp, signInWithGoogle } = useAuth()
+  const { login, register, verifyOtp } = useAuth()
   const [mode, setMode] = useState<'login' | 'register'>('login')
   const [choice, setChoice] = useState<'choice' | 'email' | 'otp'>('choice')
   const [name, setName] = useState('')
@@ -259,12 +259,6 @@ function AuthModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () 
     return () => window.clearInterval(timer)
   }, [resendCooldown])
 
-  const continueGoogle = async () => {
-    setError(''); setSubmitting(true)
-    const result = await signInWithGoogle()
-    if (result.error) { setError(result.error); setSubmitting(false) }
-  }
-
   const submitEmail = async () => {
     if (submitting || resendCooldown > 0) return
     const normalizedEmail = email.trim()
@@ -272,7 +266,7 @@ function AuthModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () 
     const result = mode === 'login' ? await login(normalizedEmail) : await register(name, normalizedEmail)
     if (result.error) {
       setError(result.error)
-      if (result.error.includes('отправка писем')) setNotice('Воспользуйтесь Google — это не зависит от лимита Email OTP.')
+      if (result.error.includes('отправка писем')) setNotice('Попробуйте ещё раз позже или проверьте настройки Email provider в Supabase.')
     } else {
       setChoice('otp'); setResendCooldown(60); setNotice(`Код отправлен на ${normalizedEmail}`); window.setTimeout(() => inputs.current[0]?.focus(), 50)
     }
@@ -283,7 +277,7 @@ function AuthModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () 
     if (submitting || resendCooldown > 0) return
     setError(''); setNotice(''); setSubmitting(true)
     const result = mode === 'login' ? await login(email) : await register(name, email)
-    if (result.error) { setError(result.error); if (result.error.includes('отправка писем')) setNotice('Воспользуйтесь Google — это не зависит от лимита Email OTP.') }
+    if (result.error) { setError(result.error); if (result.error.includes('отправка писем')) setNotice('Если письмо не приходит, владельцу проекта необходимо включить встроенный SMTP в настройках Supabase.') }
     else { setDigits(['', '', '', '', '', '']); setResendCooldown(60); setNotice(`Новый код отправлен на ${email.trim()}`); window.setTimeout(() => inputs.current[0]?.focus(), 50) }
     setSubmitting(false)
   }
@@ -291,7 +285,7 @@ function AuthModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () 
   const submitCode = async (code = digits.join('')) => {
     setError(''); setSubmitting(true)
     const result = await verifyOtp(email, code)
-    if (result.error) { setError(result.error); setNotice('Если код не принимается, запросите новый код или выберите Google.'); setDigits(['', '', '', '', '', '']); setOtpErrorPulse(true); window.setTimeout(() => setOtpErrorPulse(false), 420); inputs.current[0]?.focus() } else onSuccess()
+    if (result.error) { setError(result.error); setNotice('Если код не принимается, запросите новый код и проверьте письмо.'); setDigits(['', '', '', '', '', '']); setOtpErrorPulse(true); window.setTimeout(() => setOtpErrorPulse(false), 420); inputs.current[0]?.focus() } else onSuccess()
     setSubmitting(false)
   }
 
@@ -316,15 +310,13 @@ function AuthModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () 
     <h2>{choice === 'otp' ? 'Введите код' : 'Войти в PULSE'}<span>.</span></h2>
     <p className="modal-subtitle">{choice === 'otp' ? `Шесть цифр из письма для ${email.trim()}.` : 'Карта доступна без аккаунта. Вход нужен только для сохранения личных действий.'}</p>
     {choice === 'choice' && <div className="auth-choice-list">
-      <button className="auth-choice auth-choice-primary" disabled={submitting} onClick={() => { void continueGoogle() }}><span className="auth-choice-icon google-mark">G</span><span><strong>Продолжить с Google</strong><small>Быстрый постоянный аккаунт</small></span><ArrowRight size={16} /></button>
-      <div className="auth-choice-divider"><span>или</span></div>
-      <button className="auth-choice" onClick={() => { setChoice('email'); setError('') }}><span className="auth-choice-icon"><MailIcon /></span><span><strong>Войти по e-mail</strong><small>Одноразовый 6-значный код</small></span><ArrowRight size={16} /></button>
+      <button className="auth-choice auth-choice-primary" onClick={() => { setChoice('email'); setError('') }}><span className="auth-choice-icon"><MailIcon /></span><span><strong>Войти по e-mail</strong><small>Одноразовый 6-значный код</small></span><ArrowRight size={16} /></button>
       <button className="auth-choice auth-choice-quiet" disabled={submitting} onClick={() => { setError(''); onClose() }}><span className="auth-choice-icon"><MapIcon size={16} /></span><span><strong>Продолжить без аккаунта</strong><small>Просмотр карты, поиск и события доступны гостям</small></span></button>
     </div>}
     {choice === 'email' && <><button className="auth-back-link" onClick={() => setChoice('choice')}>← Все способы входа</button><div className="auth-provider-note"><span>Без пароля</span><strong>{mode === 'login' ? 'Вход по email с одноразовым кодом' : 'Регистрация по email с одноразовым кодом'}</strong></div><div className="auth-tabs"><button className={mode === 'login' ? 'active' : ''} onClick={() => { setMode('login'); setError('') }}>Войти</button><button className={mode === 'register' ? 'active' : ''} onClick={() => { setMode('register'); setError('') }}>Регистрация</button></div>{mode === 'register' && <label className="input-label">Имя<input className="text-[16px]" value={name} onChange={(event) => setName(event.target.value)} placeholder="Как к вам обращаться?" autoComplete="name" /></label>}<label className="input-label">Email<input className="text-[16px]" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" type="email" autoComplete="email" /></label><button className="primary-action" disabled={submitting} onClick={() => { void submitEmail() }}>{submitting ? 'Отправляем…' : 'Получить 6-значный код'}<ArrowRight size={16} /></button></>}
     {choice === 'otp' && <><button className="auth-back-link" onClick={() => setChoice('email')}>← Изменить email</button><div className={`otp-grid ${otpErrorPulse ? 'otp-grid-error' : ''}`} role="group" aria-label="6-значный код">{digits.map((digit, index) => <input key={index} ref={(element) => { inputs.current[index] = element }} className="otp-cell text-[16px]" inputMode="numeric" pattern="[0-9]*" autoComplete={index === 0 ? 'one-time-code' : 'off'} maxLength={index === 0 ? 6 : 1} value={digit} onChange={(event) => updateDigit(index, event.target.value)} onPaste={(event) => { event.preventDefault(); updateDigit(index, event.clipboardData.getData('text')) }} onKeyDown={(event) => { if (event.key === 'Backspace' && !digits[index] && index > 0) inputs.current[index - 1]?.focus() }} aria-label={`Цифра ${index + 1}`} />)}</div><button className="primary-action" disabled={submitting || digits.some((digit) => !digit)} onClick={() => { void submitCode() }}>{submitting ? 'Проверяем…' : 'Подтвердить код'}<Check size={16} /></button><div className="otp-actions"><button className="otp-resend" disabled={submitting || resendCooldown > 0} onClick={() => { void resendOtp() }}>{resendCooldown > 0 ? `Повторная отправка через ${resendCooldown} с` : 'Отправить код повторно'}</button><button className="otp-change" disabled={submitting} onClick={() => setChoice('choice')}>Другой способ</button></div></>}
     {error && <p className="form-error">{error}</p>}{notice && <p className="form-notice">{notice}</p>}
-    <p className="auth-disclaimer">Гости могут смотреть карту и искать события. Для постоянного аккаунта используйте Google или Email OTP.</p>
+    <p className="auth-disclaimer">Гости могут смотреть карту и искать события. Для постоянного аккаунта используйте Email OTP.</p>
   </div></ModalFrame>
 }
 

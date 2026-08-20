@@ -502,7 +502,7 @@ html[data-theme='dark'] .real-map .leaflet-tile-pane {
 }
 
 
-/* Auth choice architecture: Google first, email fallback, guest and temporary anonymous access */
+/* Auth choice architecture: Email OTP and guest access */
 .auth-choice-list { display:flex; flex-direction:column; gap:9px; margin-top:20px; }
 .auth-choice { display:flex; align-items:center; gap:12px; width:100%; min-height:64px; padding:11px 13px; text-align:left; color:var(--text-main); background:var(--surface-control); border:1px solid var(--control-border); border-radius:14px; transition:transform var(--motion-fast) var(--motion-ease), background-color var(--motion-fast) var(--motion-ease), border-color var(--motion-fast) var(--motion-ease), box-shadow var(--motion-fast) var(--motion-ease); }
 .auth-choice:hover:not(:disabled) { transform:translateY(-1px); background:var(--surface-control-hover); border-color:var(--lime); box-shadow:0 10px 24px rgba(34,52,68,.1); }
@@ -516,9 +516,6 @@ html[data-theme='dark'] .real-map .leaflet-tile-pane {
 .auth-choice-primary small { color:#405b2a; }
 .auth-choice-icon { display:grid; place-items:center; width:32px; height:32px; flex:0 0 auto; color:var(--text-muted); background:rgba(255,255,255,.58); border:1px solid var(--control-border); border-radius:10px; }
 .auth-choice-primary .auth-choice-icon { color:#10200d; background:rgba(255,255,255,.56); border-color:rgba(12,35,8,.14); }
-.google-mark { font:900 16px Arial,sans-serif; color:#4285f4 !important; }
-.auth-choice-divider { display:flex; align-items:center; gap:10px; color:var(--text-dim); font:700 9px 'DM Mono',monospace; text-transform:uppercase; }
-.auth-choice-divider::before, .auth-choice-divider::after { content:''; height:1px; flex:1; background:var(--control-border); }
 .auth-back-link { display:inline-flex; margin:4px 0 2px; padding:4px 0; color:var(--text-muted); background:transparent; border:0; font-size:11px; }
 .auth-back-link:hover { color:var(--text-strong); }
 .guest-chip { color:var(--text-muted) !important; }
@@ -535,3 +532,9 @@ html[data-theme='dark'] .real-map .leaflet-tile-pane {
 .search-submit:hover { color:var(--text-strong); background:var(--surface-control-hover); }
 .search-submit:active { transform:scale(.94); }
 @media (max-width:700px) { .search-submit { width:40px; height:40px; flex-basis:40px; } }
+
+
+.search-status { display:inline-flex; align-items:center; gap:5px; white-space:nowrap; color:var(--text-muted); }
+.search-spinner { width:11px; height:11px; border:1.5px solid currentColor; border-right-color:transparent; border-radius:50%; animation:search-spin .7s linear infinite; }
+@keyframes search-spin { to { transform:rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .search-spinner { animation:none; } }
