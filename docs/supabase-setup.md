@@ -1,31 +1,11 @@
-# Supabase setup for PULSE
+# Настройка Supabase для PULSE
 
-## 1. Create the project
+## Шаг 1. Применить SQL-схему
 
-Create a free Supabase project, then open **Project Settings → API** and copy:
+В панели Supabase откройте **SQL Editor → New query**, вставьте весь файл [`supabase/schema.sql`](../supabase/schema.sql) и нажмите **Run**. Скрипт создаёт `profiles` и `events`, включает RLS, добавляет триггер профиля, RPC `create_event()` с лимитом 5 событий за 10 минут, PostGIS-координаты и подключение `events` к `supabase_realtime`.
 
-- `Project URL` → `VITE_SUPABASE_URL`
-- `anon public` key → `VITE_SUPABASE_ANON_KEY`
+## Шаг 2. Включить Email OTP и задать URL
 
-Add both keys in Freebuff **Settings → Environment**. Do not put the service-role key in the browser or in `VITE_` variables.
+Откройте **Authentication → Providers → Email**, включите Email provider и сохраните настройки. В **Authentication → URL Configuration** укажите Site URL и Redirect URLs для preview/production-доменов приложения. На стороне фронтенда задайте `VITE_SUPABASE_URL` из **Project Settings → API → Project URL** и `VITE_SUPABASE_ANON_KEY` из **Project Settings → API → Publishable/anon key**. Service-role key нельзя помещать в браузер или в переменные `VITE_`.
 
-## 2. Create the database
-
-Open **SQL Editor**, paste and run [`supabase/schema.sql`](../supabase/schema.sql). It creates:
-
-- `profiles` linked to `auth.users`
-- public realtime `events`
-- RLS policies
-- email-profile trigger
-- `create_event()` RPC with a server-side limit of 5 events per user per 10 minutes
-- PostGIS coordinates and a spatial index
-
-## 3. Turn on email verification
-
-In **Authentication → Providers → Email**:
-
-- enable Email provider;
-- keep **Confirm email** enabled;
-- configure the Site URL and Redirect URLs for the Freebuff preview and production domain.
-
-The app uses Supabase password auth with confirmation links. Registration succeeds only after the user follows the email link. Realtime event updates appear for every connected user after the SQL migration has enabled the `events` table in `supabase_realtime`.
+PULSE использует `signInWithOtp`: пользователь вводит email, получает одноразовую ссылку, а Supabase восстанавливает сессию после перехода по ссылке. При первом входе имя передаётся в metadata и сохраняется триггером `handle_new_user`. Публикация событий идёт через `create_event()`, а новые события синхронизируются через Supabase Realtime.

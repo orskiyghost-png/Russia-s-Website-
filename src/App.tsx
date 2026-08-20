@@ -214,7 +214,6 @@ function AuthModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () 
   const [mode, setMode] = useState<'login' | 'register'>('login')
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -222,13 +221,13 @@ function AuthModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () 
     setError('')
     setNotice('')
     setSubmitting(true)
-    const result = mode === 'login' ? await login(email, password) : await register(name, email, password)
+    const result = mode === 'login' ? await login(email) : await register(name, email)
     if (result.error) setError(result.error)
-    else if (result.needsVerification) setNotice('Аккаунт создан. Проверьте почту и перейдите по ссылке подтверждения.')
+    else if (result.needsVerification) setNotice(mode === 'login' ? 'Проверьте почту: мы отправили одноразовую ссылку для входа.' : 'Проверьте почту: мы отправили ссылку для входа и создания профиля.')
     else onSuccess()
     setSubmitting(false)
   }
-  return <ModalFrame onClose={onClose}><div className="auth-modal"><div className="modal-orbit"><Sparkles size={19} /></div><p className="modal-overline">PULSE ACCOUNT</p><h2>{mode === 'login' ? 'С возвращением' : 'Присоединиться к городу'}<span>.</span></h2><p className="modal-subtitle">{mode === 'login' ? 'Войдите, чтобы сохранять места и добавлять сигналы.' : 'Создайте аккаунт и начните видеть свой город иначе.'}</p><div className="auth-tabs"><button className={mode === 'login' ? 'active' : ''} onClick={() => { setMode('login'); setError('') }}>Войти</button><button className={mode === 'register' ? 'active' : ''} onClick={() => { setMode('register'); setError('') }}>Регистрация</button></div>{mode === 'register' && <label className="input-label">Имя<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Как к вам обращаться?" autoComplete="name" /></label>}<label className="input-label">Email<input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" type="email" autoComplete="email" /></label><label className="input-label">Пароль<input value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Минимум 6 символов" type="password" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} onKeyDown={(event) => { if (event.key === 'Enter') submit() }} /></label>{error && <p className="form-error">{error}</p>}{notice && <p className="form-notice">{notice}</p>}<button className="primary-action" disabled={submitting} onClick={() => { void submit() }}>{submitting ? 'Проверяем…' : mode === 'login' ? 'Войти в PULSE' : 'Создать аккаунт'}<ArrowRight size={16} /></button><p className="auth-disclaimer">Email подтверждается через Supabase Auth. Сессия обновляется автоматически.</p></div></ModalFrame>
+  return <ModalFrame onClose={onClose}><div className="auth-modal"><div className="modal-orbit"><Sparkles size={19} /></div><p className="modal-overline">PULSE ACCOUNT</p><h2>{mode === 'login' ? 'С возвращением' : 'Присоединиться к городу'}<span>.</span></h2><p className="modal-subtitle">{mode === 'login' ? 'Войдите, чтобы сохранять места и добавлять сигналы.' : 'Создайте аккаунт и начните видеть свой город иначе.'}</p><div className="auth-tabs"><button className={mode === 'login' ? 'active' : ''} onClick={() => { setMode('login'); setError('') }}>Войти</button><button className={mode === 'register' ? 'active' : ''} onClick={() => { setMode('register'); setError('') }}>Регистрация</button></div>{mode === 'register' && <label className="input-label">Имя<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Как к вам обращаться?" autoComplete="name" /></label>}<label className="input-label">Email<input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" type="email" autoComplete="email" /></label>{error && <p className="form-error">{error}</p>}{notice && <p className="form-notice">{notice}</p>}<button className="primary-action" disabled={submitting} onClick={() => { void submit() }}>{submitting ? 'Отправляем…' : mode === 'login' ? 'Получить код входа' : 'Получить код регистрации'}<ArrowRight size={16} /></button><p className="auth-disclaimer">Вход выполняется по одноразовой ссылке из письма Supabase Auth. Пароль не нужен.</p></div></ModalFrame>
 }
 
 function ReportModal({ coords, onClose, onSubmit }: { coords: { lat: number; lng: number }; onClose: () => void; onSubmit: (payload: { kind: EventKind; title: string; description: string }) => void }) {

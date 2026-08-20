@@ -9,8 +9,8 @@ type AuthContextValue = {
   user: AuthUser | null
   loading: boolean
   configured: boolean
-  login: (email: string, password: string) => Promise<AuthResult>
-  register: (name: string, email: string, password: string) => Promise<AuthResult>
+  login: (email: string) => Promise<AuthResult>
+  register: (name: string, email: string) => Promise<AuthResult>
   updateProfile: (updates: Partial<Pick<AuthUser, 'name' | 'city' | 'notifications'>>) => Promise<string | null>
   logout: () => Promise<void>
 }
@@ -49,20 +49,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     user,
     loading,
     configured: isSupabaseConfigured,
-    login: async (email, password) => {
+    login: async (email) => {
       if (!isSupabaseConfigured) return { error: 'Добавьте VITE_SUPABASE_URL и VITE_SUPABASE_ANON_KEY в Environment' }
-      const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password })
-      return { error: error?.message ? translateAuthError(error.message) : null }
+      if (!/^\S+@\S+\.\S+$/.test(email.trim())) return { error: 'Проверьте формат email' }
+      const { error } = await supabase.auth.signInWithOtp({ email: email.trim(), options: { emailRedirectTo: window.location.origin } })
+      return error ? { error: translateAuthError(error.message) } : { error: null, needsVerification: true }
     },
-    register: async (name, email, password) => {
+    register: async (name, email) => {
       if (!isSupabaseConfigured) return { error: 'Добавьте VITE_SUPABASE_URL и VITE_SUPABASE_ANON_KEY в Environment' }
       if (name.trim().length < 2) return { error: 'Введите имя от 2 символов' }
       if (!/^\S+@\S+\.\S+$/.test(email.trim())) return { error: 'Проверьте формат email' }
-      if (password.length < 6) return { error: 'Пароль должен быть не короче 6 символов' }
-      const { data, error } = await supabase.auth.signUp({ email: email.trim(), password, options: { data: { name: name.trim() }, emailRedirectTo: window.location.origin } })
-      if (error) return { error: translateAuthError(error.message) }
-      if (!data.session) return { error: null, needsVerification: true }
-      return { error: null }
+      const { error } = await supabase.auth.signInWithOtp({ email: email.trim(), options: { data: { name: name.trim() }, emailRedirectTo: window.location.origin } })
+      return error ? { error: translateAuthError(error.message) } : { error: null, needsVerification: true }
     },
     updateProfile: async (updates) => {
       if (!user) return 'Сначала войдите в аккаунт'
@@ -81,6 +79,7 @@ function translateAuthError(message: string) {
   if (message.toLowerCase().includes('invalid login')) return 'Неверный email или пароль'
   if (message.toLowerCase().includes('already registered')) return 'Этот email уже зарегистрирован'
   if (message.toLowerCase().includes('email not confirmed')) return 'Подтвердите email по ссылке из письма'
+  if (message.toLowerCase().includes('email rate limit')) return 'Письмо уже отправлено. Попробуйте позже'
   if (message.toLowerCase().includes('rate limit')) return 'Слишком много попыток. Попробуйте позже'
   return message
 }
