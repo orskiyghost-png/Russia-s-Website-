@@ -4,15 +4,18 @@ PULSE — гиперлокальная карта городских сигна�
 
 ## Уже реализовано
 
-- Полноэкранная интерактивная Leaflet-карта с OpenStreetMap tiles.
-- Перемещение, zoom, popups, кастомные pulse-маркеры и клики по карте.
-- Поиск городов через Nominatim с плавным перелётом карты.
-- Browser Geolocation API.
-- Supabase Auth: passwordless Email OTP, подтверждение 6-значным кодом, session refresh и logout.
+- Полноэкранная интерактивная Leaflet-карта с OpenStreetMap tiles, кластеризацией и pulse-маркерами.
+- Перемещение, zoom, popups, клики по карте и создание сигнала в точке.
+- Поиск городов через Nominatim с плавным перелётом карты и Browser Geolocation API.
+- Supabase Auth: Email + Password, Cloudflare Turnstile, session refresh и logout.
+- Расширенный профиль: имя, город, район, био, аватар (загрузка из галереи), уведомления.
 - Supabase Postgres: общие события для всех пользователей.
-- Supabase Realtime: новые события синхронизируются между открытыми клиентами.
-- Database-side anti-spam: максимум 5 событий за 10 минут на пользователя.
-- RLS: чтение событий публичное, создание только через защищённый RPC.
+- Реакции и комментарии с optimistic UI и синхронизацией с базой.
+- Сообщения между пользователями (личная переписка с автором сигнала).
+- Модерация: жалобы на сигналы и админ-панель (скрыть / удалить / вернуть).
+- Database-side anti-spam: максимум 5 событий за 10 минут, 10 комментариев за 5 минут.
+- RLS: чтение событий и комментариев публичное, запись только через защищённые RPC.
+- Supabase Realtime: новые события и изменения синхронизируются между открытыми клиентами.
 - Framer Motion spring-анимации, skeleton loading, glass UI и responsive layout.
 - Radix Dialog для доступных модальных окон.
 
@@ -22,6 +25,7 @@ PULSE — гиперлокальная карта городских сигна�
 - Leaflet + react-leaflet + OpenStreetMap
 - Nominatim geocoding
 - Supabase Auth / Postgres / Realtime / PostGIS
+- Cloudflare Turnstile (CAPTCHA)
 - Framer Motion + Radix Dialog + Lucide React
 - Freebuff Preview / Deploy
 
@@ -32,12 +36,13 @@ PULSE — гиперлокальная карта городских сигна�
 1. Создайте Supabase project и добавьте в Freebuff Settings → Environment:
    - `VITE_SUPABASE_URL`
    - `VITE_SUPABASE_ANON_KEY`
-2. Выполните `supabase/schema.sql` в Supabase SQL Editor.
-3. Включите **Authentication → Providers → Email**, разрешите регистрацию, проверьте Confirm email и настройте Site URL / Redirect URLs. Для OTP-шаблона письмо должно содержать `{{ .Token }}`; не используйте GitHub repository URL как redirect URL.
+   - `VITE_TURNSTILE_SITE_KEY`
+2. Выполните в Supabase SQL Editor: `supabase/schema.sql`, затем `supabase/migrations/0001_social_features.sql`.
+3. Настройте авторизацию: **Authentication → Providers → Email** (включить, разрешить регистрацию, отключить Confirm email), **URL Configuration** (Site URL / Redirect URL продакшена) и **Bot and Abuse Protection → Cloudflare Turnstile** (вставьте Secret Key; публичный site key — в `VITE_TURNSTILE_SITE_KEY`).
 
-Service-role key не нужен фронтенду и не должен добавляться в `VITE_` переменные.
+Service-role key и Turnstile Secret Key не нужны фронтенду и не должны попадать в `VITE_` переменные.
 
-До добавления ключей preview остаётся доступным в read-only режиме с seed-картой. Авторизация и публикация событий активируются автоматически после добавления Supabase env vars. Пользовательский интерфейс PULSE работает в единственной светлой теме; переключатель dark/light отключён.
+До добавления ключей preview остаётся доступным в read-only режиме с seed-картой. Авторизация, публикация и социальные функции активируются автоматически после добавления Supabase env vars.
 
 ## Запуск и проверка
 
