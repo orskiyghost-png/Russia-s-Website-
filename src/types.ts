@@ -1,7 +1,7 @@
 import type { ComponentType } from 'react'
 
 export type EventKind = 'city' | 'vibe' | 'street' | 'help'
-export type Layer = 'all' | EventKind
+export type Layer = 'all' | 'roads' | 'utilities' | 'social' | 'incidents'
 export type IconComponent = ComponentType<{ size?: number; strokeWidth?: number; className?: string }>
 
 export type RadarEvent = {

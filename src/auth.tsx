@@ -71,6 +71,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const nextUser = await hydrateUser(session.user)
       if (mounted) setUser(nextUser)
     }
+
     const completeAuthCallback = async () => {
       const params = new URLSearchParams(window.location.search)
       const tokenHash = params.get('token_hash')
@@ -89,6 +90,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .then(() => supabase.auth.getSession())
       .then(({ data }) => applySession(data.session))
       .finally(() => { if (mounted) setLoading(false) })
+
     return () => { mounted = false; listener.subscription.unsubscribe() }
   }, [])
 
@@ -99,14 +101,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     login: async (email) => {
       if (!isSupabaseConfigured) return { error: 'Добавьте VITE_SUPABASE_URL и VITE_SUPABASE_ANON_KEY в Environment' }
       if (!validEmail(email)) return { error: 'Проверьте формат email' }
+
       const { error } = await supabase.auth.signInWithOtp({ email: email.trim(), options: { shouldCreateUser: false, emailRedirectTo: appRedirectUrl() } })
+
       return error ? { error: translateAuthError(error.message) } : { error: null, needsVerification: true }
     },
     register: async (name, email) => {
       if (!isSupabaseConfigured) return { error: 'Добавьте VITE_SUPABASE_URL и VITE_SUPABASE_ANON_KEY в Environment' }
       if (name.trim().length < 2) return { error: 'Введите имя от 2 символов' }
       if (!validEmail(email)) return { error: 'Проверьте формат email' }
+
       const { error } = await supabase.auth.signInWithOtp({ email: email.trim(), options: { shouldCreateUser: true, emailRedirectTo: appRedirectUrl(), data: { name: name.trim() } } })
+
       return error ? { error: translateAuthError(error.message) } : { error: null, needsVerification: true }
     },
     verifyOtp: async (email, token) => {

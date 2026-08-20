@@ -1,4 +1,4 @@
-import { AlertTriangle, Bike, HandHeart, Layers3, Sparkles, Zap } from 'lucide-react'
+import { AlertTriangle, Bike, HandHeart, Layers3, Sparkles, Zap, Construction, Droplets, PartyPopper, Siren } from 'lucide-react'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 import type { IconComponent, RadarEvent, EventKind, Layer } from './types'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
@@ -7,10 +7,10 @@ export const DEFAULT_CENTER: [number, number] = [51.2049, 58.5668]
 
 export const layerConfig: Array<{ id: Layer; label: string; icon: IconComponent; color: string }> = [
   { id: 'all', label: 'Все события', icon: Layers3, color: 'lime' },
-  { id: 'city', label: 'Город', icon: Zap, color: 'amber' },
-  { id: 'vibe', label: 'Вайб', icon: Sparkles, color: 'pink' },
-  { id: 'street', label: 'Стрит', icon: Bike, color: 'violet' },
-  { id: 'help', label: 'Бартер', icon: HandHeart, color: 'blue' },
+  { id: 'roads', label: 'ДТП и Дороги', icon: Construction, color: 'amber' },
+  { id: 'utilities', label: 'ЖКХ и Отключения', icon: Droplets, color: 'blue' },
+  { id: 'social', label: 'Погулять и Встречи', icon: PartyPopper, color: 'pink' },
+  { id: 'incidents', label: 'Происшествия', icon: Siren, color: 'violet' },
 ]
 
 export const kindConfig: Record<EventKind, { label: string; color: string; icon: IconComponent }> = {
@@ -21,10 +21,10 @@ export const kindConfig: Record<EventKind, { label: string; color: string; icon:
 }
 
 export const seedEvents: RadarEvent[] = [
-  { id: 'orsk-water', kind: 'city', category: 'Коммунальное', title: 'Воду вернут к 18:00', description: 'Коммунальная бригада работает на линии. Питьевая вода доступна у соседнего дома.', location: 'проспект Ленина', lat: 51.2038, lng: 58.5662, createdAt: Date.now() - 12 * 60_000, userName: 'Городской штаб', reactions: 12, comments: 3 },
-  { id: 'orsk-vibe', kind: 'vibe', category: 'Вайб', title: 'Тихий вечер у реки', description: 'Спокойный маршрут для прогулки: мягкий свет, открытые веранды и музыка во дворах.', location: 'Набережная Урала', lat: 51.2152, lng: 58.5793, createdAt: Date.now() - 8 * 60_000, userName: 'orsk.wav', reactions: 24, comments: 5 },
-  { id: 'orsk-street', kind: 'street', category: 'Стрит-культура', title: 'Новый спот для роликов', description: 'Ровная площадка с хорошим светом после 19:00. Подходит для новичков.', location: 'Парк Строителей', lat: 51.2058, lng: 58.5584, createdAt: Date.now() - 34 * 60_000, userName: 'anton_ollie', reactions: 18, comments: 4 },
-  { id: 'orsk-help', kind: 'help', category: 'Соседская помощь', title: 'Отдам домашнюю выпечку', description: 'Свежий хлеб и пироги, можно забрать сегодня до 20:00.', location: '2-й микрорайон', lat: 51.1887, lng: 58.5611, createdAt: Date.now() - 60 * 60_000, userName: 'sosedka_ira', reactions: 9, comments: 2 },
+  { id: 'orsk-water', kind: 'city', category: 'ЖКХ и Отключения', title: 'Воду вернут к 18:00', description: 'Коммунальная бригада работает на линии. Питьевая вода доступна у соседнего дома.', location: 'проспект Ленина', lat: 51.2038, lng: 58.5662, createdAt: Date.now() - 12 * 60_000, userName: 'Городской штаб', reactions: 12, comments: 3 },
+  { id: 'orsk-vibe', kind: 'vibe', category: 'Погулять и Встречи', title: 'Тихий вечер у реки', description: 'Спокойный маршрут для прогулки: мягкий свет, открытые веранды и музыка во дворах.', location: 'Набережная Урала', lat: 51.2152, lng: 58.5793, createdAt: Date.now() - 8 * 60_000, userName: 'orsk.wav', reactions: 24, comments: 5 },
+  { id: 'orsk-street', kind: 'street', category: 'Погулять и Встречи', title: 'Новый спот для роликов', description: 'Ровная площадка с хорошим светом после 19:00. Подходит для новичков.', location: 'Парк Строителей', lat: 51.2058, lng: 58.5584, createdAt: Date.now() - 34 * 60_000, userName: 'anton_ollie', reactions: 18, comments: 4 },
+  { id: 'orsk-help', kind: 'help', category: 'Происшествия', title: 'Отдам домашнюю выпечку', description: 'Свежий хлеб и пироги, можно забрать сегодня до 20:00.', location: '2-й микрорайон', lat: 51.1887, lng: 58.5611, createdAt: Date.now() - 60 * 60_000, userName: 'sosedka_ira', reactions: 9, comments: 2 },
 ]
 
 type EventRow = {
@@ -68,6 +68,14 @@ export async function createEvent(payload: { kind: EventKind; category: string; 
   if (error) throw error
   const row = Array.isArray(data) ? data[0] : data
   return fromRow(row as EventRow)
+}
+
+export function eventLayer(category: string): Exclude<Layer, 'all'> {
+  const value = category.toLowerCase()
+  if (/(дтп|дорог|перекры|ремонт|авар)/.test(value)) return 'roads'
+  if (/(жкх|коммун|вод|свет|отопл|отключ)/.test(value)) return 'utilities'
+  if (/(погуля|встреч|событ|меропр|мест|вайб|стрит|бартер|помощ)/.test(value)) return 'social'
+  return 'incidents'
 }
 
 export function relativeTime(timestamp: number) {

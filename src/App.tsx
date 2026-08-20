@@ -33,7 +33,9 @@ import {
 } from 'lucide-react'
 import { CityMap, LocateMeButton } from './CityMap'
 import { useAuth } from './auth'
+
 import { DEFAULT_CENTER, createEvent as createServerEvent, fetchEvents, kindConfig, layerConfig, relativeTime, subscribeToEvents } from './data'
+
 import type { EventKind, Layer, RadarEvent } from './types'
 
 const spring = { type: 'spring' as const, stiffness: 320, damping: 30 }
@@ -78,7 +80,7 @@ function App() {
   const filteredEvents = useMemo(() => {
     const normalized = query.trim().toLowerCase()
     return events.filter((event) => {
-      const matchesLayer = activeLayer === 'all' || event.kind === activeLayer
+      const matchesLayer = activeLayer === 'all' || eventLayer(event.category) === activeLayer
       const matchesQuery = !normalized || `${event.title} ${event.description} ${event.location} ${event.category}`.toLowerCase().includes(normalized)
       return matchesLayer && matchesQuery
     })
@@ -88,6 +90,10 @@ function App() {
     setToast({ message, tone })
     window.setTimeout(() => setToast(null), 3000)
   }
+
+  useEffect(() => {
+    if (user) setIsAuthOpen(false)
+  }, [user])
 
   useEffect(() => {
     let active = true
@@ -168,8 +174,10 @@ function App() {
         <span className="logo-orbit"><span /></span><span className="logo-word">PULSE<span>.</span></span>
       </button>
       <div className="header-search-wrap">
+
         <Search size={16} />
         <input className="text-[16px]" value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void searchCity() }} placeholder="Найти город или событие" aria-label="Поиск города" />
+
         {searching && <span className="search-status">ищем…</span>}
         <kbd>⌘ K</kbd>
         {searchMessage && <span className="search-result-label">{searchMessage}</span>}
