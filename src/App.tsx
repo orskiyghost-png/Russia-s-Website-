@@ -1,0 +1,267 @@
+import { useEffect, useMemo, useState } from 'react'
+import type { ReactNode } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
+import * as Dialog from '@radix-ui/react-dialog'
+import {
+  Activity,
+  ArrowRight,
+  Bell,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Clock3,
+  Crosshair,
+  LogIn,
+  LogOut,
+  Map as MapIcon,
+  MapPin,
+  Menu,
+  MessageCircle,
+  Navigation,
+  Plus,
+  Search,
+  Settings2,
+  ShieldCheck,
+  Sparkles,
+  ThumbsUp,
+  UserRound,
+  Users,
+  X,
+  Zap,
+} from 'lucide-react'
+import { CityMap, LocateMeButton, MapClickHint } from './CityMap'
+import { useAuth } from './auth'
+import { DEFAULT_CENTER, createEvent as createServerEvent, fetchEvents, kindConfig, layerConfig, relativeTime, subscribeToEvents } from './data'
+import type { EventKind, Layer, RadarEvent } from './types'
+
+const spring = { type: 'spring' as const, stiffness: 320, damping: 30 }
+
+type Toast = { message: string; tone?: 'error' | 'success' }
+
+function App() {
+  const { user, loading: authLoading, configured } = useAuth()
+  const [events, setEvents] = useState<RadarEvent[]>([])
+  const [eventsLoading, setEventsLoading] = useState(true)
+  const [savingEvent, setSavingEvent] = useState(false)
+  const [center, setCenter] = useState<[number, number]>(DEFAULT_CENTER)
+  const [selectedEvent, setSelectedEvent] = useState<RadarEvent | null>(null)
+  const [activeLayer, setActiveLayer] = useState<Layer>('all')
+  const [query, setQuery] = useState('')
+  const [searching, setSearching] = useState(false)
+  const [searchMessage, setSearchMessage] = useState('')
+  const [pendingCoords, setPendingCoords] = useState<{ lat: number; lng: number } | null>(null)
+  const [isReportOpen, setIsReportOpen] = useState(false)
+  const [isAuthOpen, setIsAuthOpen] = useState(false)
+  const [isProfileOpen, setIsProfileOpen] = useState(false)
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false)
+  const [isMenuOpen, setIsMenuOpen] = useState(false)
+  const [toast, setToast] = useState<Toast | null>(null)
+
+  const filteredEvents = useMemo(() => {
+    const normalized = query.trim().toLowerCase()
+    return events.filter((event) => {
+      const matchesLayer = activeLayer === 'all' || event.kind === activeLayer
+      const matchesQuery = !normalized || `${event.title} ${event.description} ${event.location} ${event.category}`.toLowerCase().includes(normalized)
+      return matchesLayer && matchesQuery
+    })
+  }, [activeLayer, events, query])
+
+  const notify = (message: string, tone: Toast['tone'] = 'success') => {
+    setToast({ message, tone })
+    window.setTimeout(() => setToast(null), 3000)
+  }
+
+  useEffect(() => {
+    let active = true
+    const refreshEvents = async () => {
+      try {
+        setEventsLoading(true)
+        const result = await fetchEvents()
+        if (active) setEvents(result.events)
+      } catch {
+        if (active) notify('Не удалось загрузить события', 'error')
+      } finally {
+        if (active) setEventsLoading(false)
+      }
+    }
+    void refreshEvents()
+    const unsubscribe = subscribeToEvents(() => { void refreshEvents() })
+    return () => { active = false; unsubscribe() }
+  }, [])
+
+  const searchCity = async () => {
+    const value = query.trim()
+    if (!value || searching) return
+    setSearching(true)
+    setSearchMessage('')
+    try {
+      const response = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&accept-language=ru&q=${encodeURIComponent(value)}`)
+      if (!response.ok) throw new Error('geocoding')
+      const places = await response.json() as Array<{ lat: string; lon: string; display_name: string }>
+      if (!places.length) {
+        setSearchMessage('Город не найден')
+        return
+      }
+      const place = places[0]
+      setCenter([Number(place.lat), Number(place.lon)])
+      setQuery('')
+      setSearchMessage(place.display_name.split(',').slice(0, 2).join(', '))
+      setSelectedEvent(null)
+    } catch {
+      setSearchMessage('Не удалось связаться с Nominatim')
+    } finally {
+      setSearching(false)
+    }
+  }
+
+  const openReportAt = (coords?: { lat: number; lng: number }) => {
+    if (!user) {
+      setIsAuthOpen(true)
+      notify('Войдите, чтобы добавлять события', 'error')
+      return
+    }
+    setPendingCoords(coords ?? { lat: center[0], lng: center[1] })
+    setIsReportOpen(true)
+  }
+
+  const createEvent = async (payload: { kind: EventKind; title: string; description: string }) => {
+    if (!pendingCoords || !user || savingEvent) return
+    const config = kindConfig[payload.kind]
+    setSavingEvent(true)
+    try {
+      const newEvent = await createServerEvent({ ...payload, category: config.label, lat: pendingCoords.lat, lng: pendingCoords.lng })
+      setEvents((current) => [newEvent, ...current])
+      setCenter([newEvent.lat, newEvent.lng])
+      setSelectedEvent(newEvent)
+      setIsReportOpen(false)
+      setPendingCoords(null)
+      notify('Событие опубликовано для всех жителей')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : ''
+      notify(message.includes('RATE_LIMIT') ? 'Лимит: максимум 5 меток за 10 минут' : 'Не удалось сохранить событие', 'error')
+    } finally {
+      setSavingEvent(false)
+    }
+  }
+
+  return <div className="pulse-app">
+    <header className="pulse-header glass-panel">
+      <button className="pulse-logo" onClick={() => { setCenter(DEFAULT_CENTER); setSelectedEvent(null) }} aria-label="В центр карты">
+        <span className="logo-orbit"><span /></span><span className="logo-word">PULSE<span>.</span></span>
+      </button>
+      <div className="header-search-wrap">
+        <Search size={16} />
+        <input value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void searchCity() }} placeholder="Найти город или событие" aria-label="Поиск города" />
+        {searching && <span className="search-status">ищем…</span>}
+        <kbd>⌘ K</kbd>
+        {searchMessage && <span className="search-result-label">{searchMessage}</span>}
+      </div>
+      <div className="header-actions">
+        <span className="live-indicator"><i /> live</span>
+        <button className="header-icon-button" onClick={() => setIsNotificationsOpen(true)} aria-label="Уведомления"><Bell size={17} /><span className="unread-dot" /></button>
+        {user ? <button className="user-chip" onClick={() => setIsProfileOpen(true)}><span className="user-avatar">{initials(user.name)}</span><span className="user-name">{user.name}</span><ChevronDown size={14} /></button> : <button className="login-button" onClick={() => setIsAuthOpen(true)}><LogIn size={15} /> Войти</button>}
+        <button className="mobile-menu-button header-icon-button" onClick={() => setIsMenuOpen((value) => !value)} aria-label="Открыть меню"><Menu size={18} /></button>
+      </div>
+    </header>
+
+    <aside className={`layer-rail glass-panel ${isMenuOpen ? 'open' : ''}`}>
+      <div className="rail-heading"><span>СЛОИ РАДАРА</span><button onClick={() => setIsMenuOpen(false)}><X size={15} /></button></div>
+      {layerConfig.map((layer) => { const LayerIcon = layer.icon; return <button key={layer.id} className={`layer-button ${activeLayer === layer.id ? 'active' : ''}`} onClick={() => { setActiveLayer(layer.id); setIsMenuOpen(false) }}><span className={`layer-symbol ${layer.color}`}><LayerIcon size={16} /></span><span>{layer.label}</span>{layer.id === 'all' && <b>{events.length}</b>}</button> })}
+      <div className="rail-divider" />
+      <button className="layer-button" onClick={() => openReportAt()}><span className="layer-symbol lime"><Plus size={16} /></span><span>Добавить метку</span></button>
+      <div className="rail-footer"><div className="ai-badge"><Sparkles size={14} /><span><strong>PULSE AI</strong><small>42 источника онлайн</small></span></div><span className="connection-state"><i /> синхронизировано</span></div>
+    </aside>
+
+    <main className="map-stage">
+      <CityMap center={center} events={filteredEvents} selectedId={selectedEvent?.id} onSelect={setSelectedEvent} onMapClick={openReportAt} />
+      {(eventsLoading || searching || authLoading) && <MapSkeleton label={searching ? 'Ищем город…' : 'Синхронизируем радар…'} />}
+      <div className="map-vignette" />
+      <div className="map-title-block"><p>МОСКВА · ОБНОВЛЕНО ТОЛЬКО ЧТО</p><h1>Город в реальном <em>времени</em></h1><span><Users size={13} /> {events.length + 18} сигналов в радиусе 2 км</span></div>
+      <div className="map-controls glass-panel"><LocateMeButton onLocated={(location) => { setCenter(location); notify('Карта центрирована на вас') }} onError={(message) => notify(message, 'error')} /><button className="map-floating-control" onClick={() => setCenter(DEFAULT_CENTER)} title="Вернуться к Москве" aria-label="Вернуться к Москве"><Navigation size={16} /></button></div>
+      <MapClickHint onClick={() => openReportAt()} />
+
+      <AnimatePresence>{selectedEvent && <EventSheet event={selectedEvent} onClose={() => setSelectedEvent(null)} onReact={() => notify('Реакция сохранена')} />}</AnimatePresence>
+      <motion.div className="event-strip" initial={{ y: 18, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={spring}>
+        <div className="strip-heading"><span><Activity size={14} /> В ЭФИРЕ</span><b>{filteredEvents.length} событий</b></div>
+        <div className="strip-list">{filteredEvents.slice(0, 4).map((event) => <MiniEvent key={event.id} event={event} selected={event.id === selectedEvent?.id} onClick={() => setSelectedEvent(event)} />)}</div>
+      </motion.div>
+    </main>    {!configured && <div className="backend-banner glass-panel"><Zap size={14} /><span>Preview mode: подключите Supabase, чтобы включить общие события и email-auth</span><button onClick={() => setIsAuthOpen(true)}>Настроить <ArrowRight size={13} /></button></div>}
+    <div className="bottom-actions glass-panel"><button onClick={() => openReportAt()} className="add-event-button"><Plus size={17} /> Создать сигнал <kbd>⌘ N</kbd></button><span className="map-attribution">Карта © OpenStreetMap contributors</span><span className="desktop-only-hint"><Crosshair size={13} /> Кликните по любой точке карты, чтобы поставить метку</span></div>
+
+    <AnimatePresence>{isAuthOpen && <AuthModal onClose={() => setIsAuthOpen(false)} onSuccess={() => { setIsAuthOpen(false); notify('Добро пожаловать в PULSE') }} />}</AnimatePresence>
+    <AnimatePresence>{isReportOpen && pendingCoords && <ReportModal coords={pendingCoords} onClose={() => { setIsReportOpen(false); setPendingCoords(null) }} onSubmit={createEvent} />}</AnimatePresence>
+    <AnimatePresence>{isProfileOpen && user && <ProfileModal onClose={() => setIsProfileOpen(false)} />}</AnimatePresence>
+    <AnimatePresence>{isNotificationsOpen && <NotificationsPanel onClose={() => setIsNotificationsOpen(false)} />}</AnimatePresence>
+    <AnimatePresence>{toast && <motion.div className={`toast-message ${toast.tone ?? 'success'}`} initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 12, opacity: 0 }}><span>{toast.tone === 'error' ? <X size={15} /> : <Check size={15} />}</span>{toast.message}</motion.div>}</AnimatePresence>
+  </div>
+}
+
+function MiniEvent({ event, selected, onClick }: { event: RadarEvent; selected: boolean; onClick: () => void }) {
+  const config = kindConfig[event.kind]
+  const Icon = config.icon
+  const isHot = Date.now() - event.createdAt < 45 * 60_000
+  return <motion.button className={`mini-event ${selected ? 'selected' : ''} ${isHot ? 'hot' : ''}`} onClick={onClick} initial={{ opacity: 0, y: 7 }} animate={{ opacity: 1, y: 0 }} transition={{ ...spring, duration: .45 }} whileTap={{ scale: .98 }}><span className={`mini-event-icon ${config.color}`}><Icon size={15} /></span><span className="mini-event-copy"><strong>{event.title}</strong><small><MapPin size={11} /> {event.location}</small></span><span className="mini-event-time">{relativeTime(event.createdAt)}</span><ChevronRight size={14} /></motion.button>
+}
+
+function EventSheet({ event, onClose, onReact }: { event: RadarEvent; onClose: () => void; onReact: () => void }) {
+  const config = kindConfig[event.kind]
+  const Icon = config.icon
+  return <motion.aside className="event-sheet glass-panel" initial={{ opacity: 0, y: 28, scale: .98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 18, scale: .98 }} transition={spring}><div className="sheet-top"><span className={`event-tag ${config.color}`}><Icon size={13} /> {event.category}</span><button className="sheet-close" onClick={onClose}><X size={16} /></button></div><h2>{event.title}</h2><p className="sheet-description">{event.description}</p><div className="sheet-meta"><span><MapPin size={13} /> {event.location}</span><span><Clock3 size={13} /> {relativeTime(event.createdAt)}</span></div><div className="sheet-footer"><span className="sheet-user"><span className="tiny-avatar">{initials(event.userName)}</span>{event.userName}</span><button className="sheet-react" onClick={onReact}><ThumbsUp size={14} /> {event.reactions}</button><span className="sheet-comments"><MessageCircle size={14} /> {event.comments}</span></div></motion.aside>
+}
+
+function AuthModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
+  const { login, register } = useAuth()
+  const [mode, setMode] = useState<'login' | 'register'>('login')
+  const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const submit = async () => {
+    setError('')
+    setNotice('')
+    setSubmitting(true)
+    const result = mode === 'login' ? await login(email, password) : await register(name, email, password)
+    if (result.error) setError(result.error)
+    else if (result.needsVerification) setNotice('Аккаунт создан. Проверьте почту и перейдите по ссылке подтверждения.')
+    else onSuccess()
+    setSubmitting(false)
+  }
+  return <ModalFrame onClose={onClose}><div className="auth-modal"><div className="modal-orbit"><Sparkles size={19} /></div><p className="modal-overline">PULSE ACCOUNT</p><h2>{mode === 'login' ? 'С возвращением' : 'Присоединиться к городу'}<span>.</span></h2><p className="modal-subtitle">{mode === 'login' ? 'Войдите, чтобы сохранять места и добавлять сигналы.' : 'Создайте аккаунт и начните видеть свой город иначе.'}</p><div className="auth-tabs"><button className={mode === 'login' ? 'active' : ''} onClick={() => { setMode('login'); setError('') }}>Войти</button><button className={mode === 'register' ? 'active' : ''} onClick={() => { setMode('register'); setError('') }}>Регистрация</button></div>{mode === 'register' && <label className="input-label">Имя<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Как к вам обращаться?" autoComplete="name" /></label>}<label className="input-label">Email<input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" type="email" autoComplete="email" /></label><label className="input-label">Пароль<input value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Минимум 6 символов" type="password" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} onKeyDown={(event) => { if (event.key === 'Enter') submit() }} /></label>{error && <p className="form-error">{error}</p>}{notice && <p className="form-notice">{notice}</p>}<button className="primary-action" disabled={submitting} onClick={() => { void submit() }}>{submitting ? 'Проверяем…' : mode === 'login' ? 'Войти в PULSE' : 'Создать аккаунт'}<ArrowRight size={16} /></button><p className="auth-disclaimer">Email подтверждается через Supabase Auth. Сессия обновляется автоматически.</p></div></ModalFrame>
+}
+
+function ReportModal({ coords, onClose, onSubmit }: { coords: { lat: number; lng: number }; onClose: () => void; onSubmit: (payload: { kind: EventKind; title: string; description: string }) => void }) {
+  const [kind, setKind] = useState<EventKind>('vibe')
+  const [title, setTitle] = useState('')
+  const [description, setDescription] = useState('')
+  return <ModalFrame onClose={onClose}><div className="report-modal"><div className="modal-heading-row"><div><p className="modal-overline">НОВЫЙ СИГНАЛ</p><h2>Добавить на карту<span>.</span></h2></div><span className="coordinate-chip"><MapPin size={12} /> {coords.lat.toFixed(4)}, {coords.lng.toFixed(4)}</span></div><p className="modal-subtitle">Сообщите соседям, что происходит в этой точке.</p><div className="category-grid">{(Object.keys(kindConfig) as EventKind[]).map((item) => { const config = kindConfig[item]; const Icon = config.icon; return <button key={item} className={`category-option ${config.color} ${kind === item ? 'selected' : ''}`} onClick={() => setKind(item)}><Icon size={17} /><span>{config.label}</span>{kind === item && <Check size={14} />}</button> })}</div><label className="input-label">Заголовок<input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Например, тихий двор с музыкой" maxLength={80} /></label><label className="input-label">Подробнее<textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Что важно знать другим?" maxLength={240} /></label><button className="primary-action" disabled={!title.trim() || !description.trim()} onClick={() => onSubmit({ kind, title: title.trim(), description: description.trim() })}>Опубликовать сигнал <ArrowRight size={16} /></button></div></ModalFrame>
+}
+
+function ProfileModal({ onClose }: { onClose: () => void }) {
+  const { user, updateProfile, logout } = useAuth()
+  const [name, setName] = useState(user?.name ?? '')
+  const [city, setCity] = useState(user?.city ?? 'Москва')
+  const [notifications, setNotifications] = useState(user?.notifications ?? true)
+  const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
+  if (!user) return null
+  const save = async () => { setSaving(true); const result = await updateProfile({ name: name.trim() || user.name, city, notifications }); if (result) setError(result); else onClose(); setSaving(false) }
+  return <ModalFrame onClose={onClose}><div className="profile-modal"><div className="profile-modal-header"><div className="large-avatar">{initials(user.name)}</div><div><p className="modal-overline">МОЙ PULSE</p><h2>{user.name}<span>.</span></h2><span className="profile-email">{user.email}</span></div></div><div className="profile-form"><label className="input-label">Ваше имя<input value={name} onChange={(event) => setName(event.target.value)} /></label><label className="input-label">Родной город<div className="select-wrap"><Navigation size={15} /><select value={city} onChange={(event) => setCity(event.target.value)}><option>Москва</option><option>Орск</option><option>Санкт-Петербург</option><option>Екатеринбург</option><option>Казань</option></select><ChevronDown size={14} /></div></label><button className="setting-toggle" onClick={() => setNotifications((value) => !value)}><span><Bell size={16} /><span><strong>Уведомления рядом</strong><small>Получать важные сигналы в вашем городе</small></span></span><i className={notifications ? 'on' : ''}><b /></i></button></div>{error && <p className="form-error">{error}</p>}<div className="profile-actions"><button className="logout-action" onClick={() => { void logout(); onClose() }}><LogOut size={15} /> Выйти</button><button className="primary-action compact" disabled={saving} onClick={() => { void save() }}>{saving ? 'Сохраняем…' : 'Сохранить'} <Check size={15} /></button></div></div></ModalFrame>
+}
+
+function NotificationsPanel({ onClose }: { onClose: () => void }) {
+  return <motion.aside className="notifications-panel glass-panel" initial={{ x: 26, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 26, opacity: 0 }} transition={spring}><div className="panel-header"><div><p className="modal-overline">PULSE / INBOX</p><h2>Уведомления</h2></div><button className="sheet-close" onClick={onClose}><X size={17} /></button></div><div className="notification-row unread"><span className="notification-icon pink"><ThumbsUp size={15} /></span><div><strong>Ваш сигнал поддержали</strong><p>5 человек оценили «Новый спот для скейта»</p><small>8 минут назад</small></div></div><div className="notification-row unread"><span className="notification-icon lime"><Sparkles size={15} /></span><div><strong>PULSE AI заметил всплеск</strong><p>На Чистых прудах сейчас необычно много людей</p><small>24 минуты назад</small></div></div><div className="notification-row"><span className="notification-icon blue"><Users size={15} /></span><div><strong>Сосед рядом предлагает помощь</strong><p>Домашний хлеб на Климентовском, 8</p><small>1 час назад</small></div></div></motion.aside>
+}
+
+function ModalFrame({ children, onClose }: { children: ReactNode; onClose: () => void }) {
+  return <Dialog.Root open onOpenChange={(open) => { if (!open) onClose() }}><Dialog.Portal><Dialog.Overlay asChild><motion.div className="dialog-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} /></Dialog.Overlay><Dialog.Content asChild><motion.div className="modal-card glass-panel" initial={{ y: 18, opacity: 0, scale: .98 }} animate={{ y: 0, opacity: 1, scale: 1 }} exit={{ y: 18, opacity: 0, scale: .98 }} transition={spring}><Dialog.Title className="sr-only">PULSE</Dialog.Title><Dialog.Description className="sr-only">Окно PULSE</Dialog.Description><Dialog.Close asChild><button className="modal-close" aria-label="Закрыть"><X size={17} /></button></Dialog.Close>{children}</motion.div></Dialog.Content></Dialog.Portal></Dialog.Root>
+}
+
+function MapSkeleton({ label }: { label: string }) {
+  return <motion.div className="map-skeleton" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><div className="skeleton-orbit"><span /></div><div className="skeleton-copy"><strong>{label}</strong><span>Данные обновляются в реальном времени</span></div></motion.div>
+}
+
+function initials(name: string) { return name.split(/\s+/).map((part) => part[0]).slice(0, 2).join('').toUpperCase() }
+
+export default App
