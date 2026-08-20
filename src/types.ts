@@ -36,6 +36,9 @@ export type AuthUser = {
   email: string
   name: string
   city: string
+  bio?: string | null
+  neighborhood?: string | null
+  role: 'user' | 'admin'
   notifications: boolean
   avatarUrl?: string | null
   createdAt: number

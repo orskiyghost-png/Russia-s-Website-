@@ -11,12 +11,12 @@ type AuthContextValue = {
   login: (email: string, password: string, captchaToken: string) => Promise<AuthResult>
   register: (name: string, email: string, password: string, captchaToken: string) => Promise<AuthResult>
   signInAnonymously: () => Promise<AuthResult>
-  updateProfile: (updates: Partial<Pick<AuthUser, 'name' | 'city' | 'notifications' | 'avatarUrl'>>) => Promise<string | null>
+  updateProfile: (updates: Partial<Pick<AuthUser, 'name' | 'city' | 'bio' | 'neighborhood' | 'notifications' | 'avatarUrl'>>) => Promise<string | null>
   logout: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined)
-type ProfileRow = { name: string; city: string; notifications: boolean; created_at: string; avatar_url?: string | null }
+type ProfileRow = { name: string; city: string; bio?: string | null; neighborhood?: string | null; role?: 'user' | 'admin' | null; notifications: boolean; created_at: string; avatar_url?: string | null }
 type ExtendedSupabaseUser = SupabaseUser & { is_anonymous?: boolean }
 
 function validEmail(email: string) { return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim()) }
@@ -25,10 +25,17 @@ function authProviderFor(sessionUser: SupabaseUser): AuthUser['authProvider'] { 
 
 async function hydrateUser(sessionUser: SupabaseUser): Promise<AuthUser> {
   const anonymous = isAnonymousUser(sessionUser)
-  const { data } = anonymous ? { data: null } : await supabase.from('profiles').select('name, city, notifications, created_at, avatar_url').eq('id', sessionUser.id).maybeSingle()
-  const profile = data as ProfileRow | null
+  let profile: ProfileRow | null = null
+  if (!anonymous) {
+    const extended = await supabase.from('profiles').select('name, city, bio, neighborhood, role, notifications, created_at, avatar_url').eq('id', sessionUser.id).maybeSingle()
+    if (!extended.error) profile = extended.data as ProfileRow | null
+    else {
+      const legacy = await supabase.from('profiles').select('name, city, notifications, created_at, avatar_url').eq('id', sessionUser.id).maybeSingle()
+      profile = legacy.data as ProfileRow | null
+    }
+  }
   const fallbackName = anonymous ? 'Гость' : sessionUser.user_metadata.name ?? sessionUser.email?.split('@')[0] ?? 'Пользователь'
-  return { id: sessionUser.id, email: sessionUser.email ?? '', name: profile?.name ?? fallbackName, city: profile?.city ?? 'Орск', notifications: profile?.notifications ?? true, avatarUrl: profile?.avatar_url ?? sessionUser.user_metadata.avatar_url ?? null, createdAt: profile ? new Date(profile.created_at).getTime() : Date.now(), isAnonymous: anonymous, authProvider: authProviderFor(sessionUser) }
+  return { id: sessionUser.id, email: sessionUser.email ?? '', name: profile?.name ?? fallbackName, city: profile?.city ?? 'Орск', bio: profile?.bio ?? null, neighborhood: profile?.neighborhood ?? null, role: profile?.role === 'admin' ? 'admin' : 'user', notifications: profile?.notifications ?? true, avatarUrl: profile?.avatar_url ?? sessionUser.user_metadata.avatar_url ?? null, createdAt: profile ? new Date(profile.created_at).getTime() : Date.now(), isAnonymous: anonymous, authProvider: authProviderFor(sessionUser) }
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -81,6 +88,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const payload: Record<string, unknown> = {}
       if (updates.name !== undefined) payload.name = updates.name
       if (updates.city !== undefined) payload.city = updates.city
+      if (updates.bio !== undefined) payload.bio = updates.bio
+      if (updates.neighborhood !== undefined) payload.neighborhood = updates.neighborhood
       if (updates.notifications !== undefined) payload.notifications = updates.notifications
       if (updates.avatarUrl !== undefined) payload.avatar_url = updates.avatarUrl
       const { error } = await supabase.from('profiles').update(payload).eq('id', user.id)

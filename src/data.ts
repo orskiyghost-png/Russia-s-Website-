@@ -36,6 +36,7 @@ type EventRow = {
   lat: number
   lng: number
   address?: string | null
+  moderation_status?: 'published' | 'hidden' | 'removed' | null
   created_at: string
   user_name: string
   avatar_url?: string | null
@@ -75,13 +76,16 @@ async function normalizeEvents(rows: EventRow[]) {
 
 export async function fetchEvents(): Promise<{ events: RadarEvent[]; configured: boolean }> {
   if (!isSupabaseConfigured) return { events: seedEvents, configured: false }
-  const primary = await supabase.from('events').select('id, kind, category, title, description, lat, lng, address, created_at, user_name, avatar_url, reactions, comments').order('created_at', { ascending: false }).limit(100)
+  const primary = await supabase.from('events').select('id, kind, category, title, description, lat, lng, address, moderation_status, created_at, user_name, avatar_url, reactions, comments').eq('moderation_status', 'published').order('created_at', { ascending: false }).limit(100)
   if (!primary.error) return { events: await normalizeEvents(primary.data as EventRow[]), configured: true }
   const primaryError = primary.error.message.toLowerCase()
-  if (!primaryError.includes('avatar_url') && !primaryError.includes('address')) throw primary.error
-  const legacy = await supabase.from('events').select('id, kind, category, title, description, lat, lng, created_at, user_name, reactions, comments').order('created_at', { ascending: false }).limit(100)
-  if (legacy.error) throw legacy.error
-  return { events: await normalizeEvents(legacy.data as EventRow[]), configured: true }
+  if (!primaryError.includes('avatar_url') && !primaryError.includes('address') && !primaryError.includes('moderation_status')) throw primary.error
+  const legacy = await supabase.from('events').select('id, kind, category, title, description, lat, lng, address, created_at, user_name, reactions, comments').order('created_at', { ascending: false }).limit(100)
+  if (!legacy.error) return { events: await normalizeEvents(legacy.data as EventRow[]), configured: true }
+  if (!legacy.error.message.toLowerCase().includes('address')) throw legacy.error
+  const oldest = await supabase.from('events').select('id, kind, category, title, description, lat, lng, created_at, user_name, reactions, comments').order('created_at', { ascending: false }).limit(100)
+  if (oldest.error) throw oldest.error
+  return { events: await normalizeEvents(oldest.data as EventRow[]), configured: true }
 }
 
 export function subscribeToEvents(onChange: () => void): () => void {
@@ -109,6 +113,25 @@ export async function createEvent(payload: { kind: EventKind; category: string; 
     if (!addressResult.error) return { ...created, address, location: address }
   }
   return created
+}
+
+export type EventReport = { id: string; eventId: string; reason: string; status: 'open' | 'reviewed' | 'dismissed'; createdAt: number }
+
+export async function reportEvent(eventId: string, reason: string): Promise<void> {
+  if (!isSupabaseConfigured || eventId.startsWith('orsk-')) throw new Error('REPORT_NOT_AVAILABLE')
+  const { error } = await supabase.rpc('create_event_report', { p_event_id: eventId, p_reason: reason.trim() })
+  if (error) throw error
+}
+
+export async function fetchOpenReports(): Promise<EventReport[]> {
+  const { data, error } = await supabase.rpc('admin_list_open_reports')
+  if (error) throw error
+  return (data ?? []).map((row: { id: string; event_id: string; reason: string; status: EventReport['status']; created_at: string }) => ({ id: row.id, eventId: row.event_id, reason: row.reason, status: row.status, createdAt: new Date(row.created_at).getTime() }))
+}
+
+export async function setEventModerationStatus(eventId: string, status: 'published' | 'hidden' | 'removed'): Promise<void> {
+  const { error } = await supabase.rpc('admin_set_event_status', { p_event_id: eventId, p_status: status })
+  if (error) throw error
 }
 
 export async function toggleReaction(eventId: string): Promise<{ reactions: number; likedByMe: boolean }> {
