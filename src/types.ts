@@ -19,6 +19,7 @@ export type RadarEvent = {
   title: string
   description: string
   location: string
+  address?: string | null
   lat: number
   lng: number
   createdAt: number

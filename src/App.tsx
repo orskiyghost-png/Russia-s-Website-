@@ -35,7 +35,7 @@ import { CityMap, LocateMeButton } from './CityMap'
 import { useAuth } from './auth'
 import { Captcha } from './Captcha'
 
-import { DEFAULT_CENTER, addComment, createEvent as createServerEvent, eventLayer, fetchComments, fetchEvents, kindConfig, layerConfig, relativeTime, subscribeToEvents, toggleReaction } from './data'
+import { DEFAULT_CENTER, addComment, createEvent as createServerEvent, eventLayer, fetchComments, fetchEvents, kindConfig, layerConfig, relativeTime, reverseGeocode, subscribeToEvents, toggleReaction } from './data'
 
 import type { EventKind, EventComment, Layer, RadarEvent } from './types'
 
@@ -216,7 +216,13 @@ function App() {
     const config = kindConfig[payload.kind]
     setSavingEvent(true)
     try {
-      const newEvent = await createServerEvent({ ...payload, category: config.label, lat: pendingCoords.lat, lng: pendingCoords.lng })
+      let address: string | null = null
+      try {
+        address = await reverseGeocode(pendingCoords.lat, pendingCoords.lng)
+      } catch {
+        address = null
+      }
+      const newEvent = await createServerEvent({ ...payload, category: config.label, lat: pendingCoords.lat, lng: pendingCoords.lng, address })
       setEvents((current) => [newEvent, ...current])
       setCenter([newEvent.lat, newEvent.lng])
       setSelectedEvent(newEvent)

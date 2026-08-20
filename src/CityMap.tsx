@@ -1,8 +1,8 @@
-import { memo, useEffect, useMemo, useRef } from 'react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { MapContainer, Marker, Popup, TileLayer, useMap, useMapEvents, ZoomControl } from 'react-leaflet'
 import L, { type LatLngExpression } from 'leaflet'
 import { Crosshair } from 'lucide-react'
-import type { EventKind, RadarEvent } from './types'
+import type { RadarEvent } from './types'
 import { kindConfig } from './data'
 import type { Theme } from './theme'
 
@@ -76,6 +76,16 @@ function markerIcon(event: RadarEvent, selected: boolean) {
   })
 }
 
+function clusterIcon(count: number) {
+  const size = 44
+  return L.divIcon({
+    className: 'pulse-leaflet-cluster-wrapper',
+    html: `<div class="pulse-leaflet-cluster" aria-label="${count} сигналов рядом"><span>${count}</span></div>`,
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
+  })
+}
+
 const EventMarker = memo(function EventMarker({ event, selectedId, onSelect }: { event: RadarEvent; selectedId?: string; onSelect: (event: RadarEvent) => void }) {
   const selected = event.id === selectedId
   const icon = useMemo(() => markerIcon(event, selected), [event, selected])
@@ -83,9 +93,40 @@ const EventMarker = memo(function EventMarker({ event, selectedId, onSelect }: {
   return <Marker position={[event.lat, event.lng]} icon={icon} eventHandlers={handlers}><Popup closeButton={false} className="pulse-popup"><strong>{event.title}</strong><span>{event.userName} · {event.location}</span></Popup></Marker>
 })
 
+function ClusterMarker({ events, onSelect }: { events: RadarEvent[]; onSelect: (event: RadarEvent) => void }) {
+  const map = useMap()
+  const center = useMemo(() => {
+    const totals = events.reduce((result, event) => ({ lat: result.lat + event.lat, lng: result.lng + event.lng }), { lat: 0, lng: 0 })
+    return [totals.lat / events.length, totals.lng / events.length] as [number, number]
+  }, [events])
+  const icon = useMemo(() => clusterIcon(events.length), [events.length])
+  const handlers = useMemo(() => ({ click: () => map.flyTo(center, Math.min(18, map.getZoom() + 2), { duration: 0.55 }) }), [center, map])
+  return <Marker position={center} icon={icon} eventHandlers={handlers}><Popup closeButton={false} className="pulse-popup"><strong>{events.length} сигналов рядом</strong><span>Приблизьте карту, чтобы открыть отдельные сигналы</span></Popup></Marker>
+}
+
+function ClusteredMarkers({ events, selectedId, onSelect }: { events: RadarEvent[]; selectedId?: string; onSelect: (event: RadarEvent) => void }) {
+  const map = useMap()
+  const [zoom, setZoom] = useState(map.getZoom())
+  useMapEvents({ zoomend: () => setZoom(map.getZoom()) })
+  const cellSize = zoom >= 16 ? 0.0005 : zoom >= 14 ? 0.0015 : 0.004
+  const groups = useMemo(() => {
+    const buckets = new Map<string, RadarEvent[]>()
+    for (const event of events) {
+      if (event.id === selectedId) {
+        buckets.set(`selected:${event.id}`, [event])
+        continue
+      }
+      const key = `${Math.round(event.lat / cellSize)}:${Math.round(event.lng / cellSize)}`
+      buckets.set(key, [...(buckets.get(key) ?? []), event])
+    }
+    return Array.from(buckets.values())
+  }, [cellSize, events, selectedId])
+  return <>{groups.map((group) => group.length > 1 ? <ClusterMarker key={group.map((event) => event.id).join('|')} events={group} onSelect={onSelect} /> : <EventMarker key={group[0].id} event={group[0]} selectedId={selectedId} onSelect={onSelect} />)}</>
+}
+
 export function CityMap({ center, events, selectedId, theme, onSelect, onMapClick }: CityMapProps) {
   const tileUrl = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
-  return <MapContainer center={center as LatLngExpression} zoom={12} minZoom={3} maxZoom={19} zoomControl={false} attributionControl={false} scrollWheelZoom preferCanvas className="real-map"><TileLayer url={tileUrl} updateWhenIdle updateWhenZooming={false} keepBuffer={2} crossOrigin /><ZoomControl position="bottomright" /><MapLayoutSync /><MapViewport center={center} /><MapClickCapture onMapClick={onMapClick} />{events.map((event) => <EventMarker key={event.id} event={event} selectedId={selectedId} onSelect={onSelect} />)}</MapContainer>
+  return <MapContainer center={center as LatLngExpression} zoom={12} minZoom={3} maxZoom={19} zoomControl={false} attributionControl={false} scrollWheelZoom preferCanvas className="real-map"><TileLayer url={tileUrl} updateWhenIdle updateWhenZooming={false} keepBuffer={2} crossOrigin /><ZoomControl position="bottomright" /><MapLayoutSync /><MapViewport center={center} /><MapClickCapture onMapClick={onMapClick} /><ClusteredMarkers events={events} selectedId={selectedId} onSelect={onSelect} /></MapContainer>
 }
 
 export function LocateMeButton({ onLocated, onError }: { onLocated: (center: [number, number]) => void; onError: (message: string) => void }) {
