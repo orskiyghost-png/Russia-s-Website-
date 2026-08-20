@@ -274,9 +274,9 @@ function AuthModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () 
     setError('')
     if (password.length < 6) { setError('Пароль должен содержать минимум 6 символов'); return }
     if (mode === 'register' && password !== confirmPassword) { setError('Пароли не совпадают'); return }
-    if (mode === 'register' && !captchaToken) { setError('Пройдите CAPTCHA перед регистрацией'); return }
+    if (!captchaToken) { setError(mode === 'login' ? 'Пройдите CAPTCHA перед входом' : 'Пройдите CAPTCHA перед регистрацией'); return }
     setSubmitting(true)
-    const result = mode === 'login' ? await login(email, password) : await register(name, email, password, captchaToken)
+    const result = mode === 'login' ? await login(email, password, captchaToken) : await register(name, email, password, captchaToken)
     if (result.error) setError(result.error)
     else onSuccess()
     setSubmitting(false)
@@ -292,11 +292,11 @@ function AuthModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () 
     <label className="input-label">Email<input className="text-[16px]" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" type="email" autoComplete="email" /></label>
     <label className="input-label">Пароль<input className="text-[16px]" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Минимум 6 символов" type="password" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} /></label>
     {mode === 'register' && <label className="input-label">Повторите пароль<input className="text-[16px]" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} placeholder="Повторите пароль" type="password" autoComplete="new-password" /></label>}
-    {mode === 'register' && <Captcha onToken={setCaptchaToken} onError={setError} />}
-    <button className="primary-action" disabled={submitting || (mode === 'register' && !captchaToken)} onClick={() => { void submit() }}>{submitting ? 'Проверяем…' : mode === 'login' ? 'Войти' : 'Зарегистрироваться'}<ArrowRight size={16} /></button>
+    <Captcha onToken={setCaptchaToken} onError={setError} />
+    <button className="primary-action" disabled={submitting || !captchaToken} onClick={() => { void submit() }}>{submitting ? 'Проверяем…' : mode === 'login' ? 'Войти' : 'Зарегистрироваться'}<ArrowRight size={16} /></button>
     {error && <p className="form-error">{error}</p>}
     <button className="auth-choice auth-choice-quiet guest-auth-button" disabled={submitting} onClick={onClose}><span className="auth-choice-icon"><MapIcon size={16} /></span><span><strong>Продолжить без аккаунта</strong><small>Просмотр карты и поиск доступны гостям</small></span></button>
-    <p className="auth-disclaimer">Регистрация не требует Magic Link или одноразового кода.</p>
+    <p className="auth-disclaimer">Вход и регистрация защищены Cloudflare Turnstile.</p>
   </div></ModalFrame>
 }
 

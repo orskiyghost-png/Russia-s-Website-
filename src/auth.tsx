@@ -8,7 +8,7 @@ type AuthContextValue = {
   user: AuthUser | null
   loading: boolean
   configured: boolean
-  login: (email: string, password: string) => Promise<AuthResult>
+  login: (email: string, password: string, captchaToken: string) => Promise<AuthResult>
   register: (name: string, email: string, password: string, captchaToken: string) => Promise<AuthResult>
   signInAnonymously: () => Promise<AuthResult>
   updateProfile: (updates: Partial<Pick<AuthUser, 'name' | 'city' | 'notifications'>>) => Promise<string | null>
@@ -52,11 +52,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     user,
     loading,
     configured: isSupabaseConfigured,
-    login: async (email, password) => {
+    login: async (email, password, captchaToken) => {
       if (!isSupabaseConfigured) return { error: 'Добавьте Supabase environment variables' }
       if (!validEmail(email)) return { error: 'Проверьте формат email' }
       if (password.length < 6) return { error: 'Пароль должен содержать минимум 6 символов' }
-      const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password })
+      if (!captchaToken) return { error: 'Пройдите CAPTCHA перед входом' }
+      const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password, options: { captchaToken } })
       return error ? { error: translateAuthError(error.message) } : { error: null }
     },
     register: async (name, email, password, captchaToken) => {
