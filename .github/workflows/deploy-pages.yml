@@ -33,6 +33,7 @@ jobs:
         env:
           VITE_SUPABASE_URL: https://vavixbintoqoivnswdwe.supabase.co
           VITE_SUPABASE_ANON_KEY: sb_publishable_J_swRh7VMA2JlUZcPlMqHQ_6yTnxfGh
+          VITE_TURNSTILE_SITE_KEY: ${{ vars.TURNSTILE_SITE_KEY }}
       - name: Add SPA fallback
         run: cp dist/index.html dist/404.html
       - name: Upload Pages artifact
