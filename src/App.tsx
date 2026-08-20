@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
-import type { ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import * as Dialog from '@radix-ui/react-dialog'
 import {
   Activity,
   ArrowRight,
   Bell,
+  Bot,
   Check,
   ChevronDown,
   ChevronRight,
@@ -16,6 +16,9 @@ import {
   Map as MapIcon,
   MapPin,
   Menu,
+  Moon,
+  Send,
+  Sun,
   MessageCircle,
   Navigation,
   Plus,
@@ -31,6 +34,7 @@ import {
 } from 'lucide-react'
 import { CityMap, LocateMeButton, MapClickHint } from './CityMap'
 import { useAuth } from './auth'
+import { useTheme } from './theme'
 import { DEFAULT_CENTER, createEvent as createServerEvent, fetchEvents, kindConfig, layerConfig, relativeTime, subscribeToEvents } from './data'
 import type { EventKind, Layer, RadarEvent } from './types'
 
@@ -40,6 +44,7 @@ type Toast = { message: string; tone?: 'error' | 'success' }
 
 function App() {
   const { user, loading: authLoading, configured } = useAuth()
+  const { theme, toggleTheme } = useTheme()
   const [events, setEvents] = useState<RadarEvent[]>([])
   const [eventsLoading, setEventsLoading] = useState(true)
   const [savingEvent, setSavingEvent] = useState(false)
@@ -54,6 +59,7 @@ function App() {
   const [isAuthOpen, setIsAuthOpen] = useState(false)
   const [isProfileOpen, setIsProfileOpen] = useState(false)
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false)
+  const [isAiOpen, setIsAiOpen] = useState(false)
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [toast, setToast] = useState<Toast | null>(null)
 
@@ -158,7 +164,7 @@ function App() {
       </div>
       <div className="header-actions">
         <span className="live-indicator"><i /> live</span>
-        <button className="header-icon-button" onClick={() => setIsNotificationsOpen(true)} aria-label="Уведомления"><Bell size={17} /><span className="unread-dot" /></button>
+        <button className="header-icon-button" onClick={() => setIsNotificationsOpen(true)} aria-label="Уведомления"><Bell size={17} /><span className="unread-dot" /></button><button className="header-icon-button theme-toggle" onClick={toggleTheme} aria-label={theme === 'dark' ? 'Включить светлую тему' : 'Включить тёмную тему'}>{theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}</button>
         {user ? <button className="user-chip" onClick={() => setIsProfileOpen(true)}><span className="user-avatar">{initials(user.name)}</span><span className="user-name">{user.name}</span><ChevronDown size={14} /></button> : <button className="login-button" onClick={() => setIsAuthOpen(true)}><LogIn size={15} /> Войти</button>}
         <button className="mobile-menu-button header-icon-button" onClick={() => setIsMenuOpen((value) => !value)} aria-label="Открыть меню"><Menu size={18} /></button>
       </div>
@@ -173,12 +179,12 @@ function App() {
     </aside>
 
     <main className="map-stage">
-      <CityMap center={center} events={filteredEvents} selectedId={selectedEvent?.id} onSelect={setSelectedEvent} onMapClick={openReportAt} />
+      <CityMap center={center} events={filteredEvents} selectedId={selectedEvent?.id} theme={theme} onSelect={setSelectedEvent} onMapClick={openReportAt} />
       {(eventsLoading || searching || authLoading) && <MapSkeleton label={searching ? 'Ищем город…' : 'Синхронизируем радар…'} />}
       <div className="map-vignette" />
       <div className="map-title-block"><p>ОРСК · ОБНОВЛЕНО ТОЛЬКО ЧТО</p><h1>Город в реальном <em>времени</em></h1><span><Users size={13} /> {events.length} сигналов в радиусе 2 км</span></div>
       <div className="map-controls glass-panel"><LocateMeButton onLocated={(location) => { setCenter(location); notify('Карта центрирована на вас') }} onError={(message) => notify(message, 'error')} /><button className="map-floating-control" onClick={() => setCenter(DEFAULT_CENTER)} title="Вернуться к Орску" aria-label="Вернуться к Орску"><Navigation size={16} /></button></div>
-      <MapClickHint onClick={() => openReportAt()} />
+      <MapClickHint onClick={() => openReportAt()} /><button className="ai-fab glass-panel" onClick={() => setIsAiOpen((value) => !value)} aria-label="Открыть PULSE AI"><Bot size={18} /><span>PULSE AI</span></button>
 
       <AnimatePresence>{selectedEvent && <EventSheet event={selectedEvent} onClose={() => setSelectedEvent(null)} onReact={() => notify('Реакция сохранена')} />}</AnimatePresence>
       <motion.div className="event-strip" initial={{ y: 18, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={spring}>
@@ -191,7 +197,7 @@ function App() {
     <AnimatePresence>{isAuthOpen && <AuthModal onClose={() => setIsAuthOpen(false)} onSuccess={() => { setIsAuthOpen(false); notify('Добро пожаловать в PULSE') }} />}</AnimatePresence>
     <AnimatePresence>{isReportOpen && pendingCoords && <ReportModal coords={pendingCoords} onClose={() => { setIsReportOpen(false); setPendingCoords(null) }} onSubmit={createEvent} />}</AnimatePresence>
     <AnimatePresence>{isProfileOpen && user && <ProfileModal onClose={() => setIsProfileOpen(false)} />}</AnimatePresence>
-    <AnimatePresence>{isNotificationsOpen && <NotificationsPanel onClose={() => setIsNotificationsOpen(false)} />}</AnimatePresence>
+    <AnimatePresence>{isNotificationsOpen && <NotificationsPanel onClose={() => setIsNotificationsOpen(false)} />}</AnimatePresence><AnimatePresence>{isAiOpen && <PulseAiPanel events={filteredEvents} onClose={() => setIsAiOpen(false)} />}</AnimatePresence>
     <AnimatePresence>{toast && <motion.div className={`toast-message ${toast.tone ?? 'success'}`} initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 12, opacity: 0 }}><span>{toast.tone === 'error' ? <X size={15} /> : <Check size={15} />}</span>{toast.message}</motion.div>}</AnimatePresence>
   </div>
 }
@@ -206,28 +212,40 @@ function MiniEvent({ event, selected, onClick }: { event: RadarEvent; selected: 
 function EventSheet({ event, onClose, onReact }: { event: RadarEvent; onClose: () => void; onReact: () => void }) {
   const config = kindConfig[event.kind]
   const Icon = config.icon
-  return <motion.aside className="event-sheet glass-panel" initial={{ opacity: 0, y: 28, scale: .98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 18, scale: .98 }} transition={spring}><div className="sheet-top"><span className={`event-tag ${config.color}`}><Icon size={13} /> {event.category}</span><button className="sheet-close" onClick={onClose}><X size={16} /></button></div><h2>{event.title}</h2><p className="sheet-description">{event.description}</p><div className="sheet-meta"><span><MapPin size={13} /> {event.location}</span><span><Clock3 size={13} /> {relativeTime(event.createdAt)}</span></div><div className="sheet-footer"><span className="sheet-user"><span className="tiny-avatar">{initials(event.userName)}</span>{event.userName}</span><button className="sheet-react" onClick={onReact}><ThumbsUp size={14} /> {event.reactions}</button><span className="sheet-comments"><MessageCircle size={14} /> {event.comments}</span></div></motion.aside>
+  return <motion.aside className="event-sheet glass-panel" initial={{ opacity: 0, y: 28, scale: .98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 18, scale: .98 }} transition={spring}><div className="sheet-top"><span className={`event-tag ${config.color}`}><Icon size={13} /> {event.category}</span><button className="sheet-close" onClick={onClose}><X size={16} /></button></div><h2>{event.title}</h2><p className="sheet-description">{event.description}</p><div className="sheet-meta"><span><MapPin size={13} /> {event.location}</span><span><Clock3 size={13} /> {relativeTime(event.createdAt)}</span></div><div className="sheet-footer"><span className="sheet-user"><span className="tiny-avatar">{event.avatarUrl ? <img src={event.avatarUrl} alt="" /> : initials(event.userName)}</span>{event.userName}</span><button className="sheet-react" onClick={onReact}><ThumbsUp size={14} /> {event.reactions}</button><span className="sheet-comments"><MessageCircle size={14} /> {event.comments}</span></div></motion.aside>
 }
 
 function AuthModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
-  const { login, register } = useAuth()
+  const { login, register, verifyOtp } = useAuth()
   const [mode, setMode] = useState<'login' | 'register'>('login')
+  const [step, setStep] = useState<'email' | 'otp'>('email')
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
+  const [digits, setDigits] = useState(['', '', '', '', '', ''])
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [submitting, setSubmitting] = useState(false)
-  const submit = async () => {
-    setError('')
-    setNotice('')
-    setSubmitting(true)
+  const inputs = useRef<Array<HTMLInputElement | null>>([])
+  const submitEmail = async () => {
+    setError(''); setNotice(''); setSubmitting(true)
     const result = mode === 'login' ? await login(email) : await register(name, email)
     if (result.error) setError(result.error)
-    else if (result.needsVerification) setNotice(mode === 'login' ? 'Проверьте почту: мы отправили одноразовую ссылку для входа.' : 'Проверьте почту: мы отправили ссылку для входа и создания профиля.')
-    else onSuccess()
+    else { setStep('otp'); setNotice(`Код отправлен на ${email.trim()}`); window.setTimeout(() => inputs.current[0]?.focus(), 50) }
     setSubmitting(false)
   }
-  return <ModalFrame onClose={onClose}><div className="auth-modal"><div className="modal-orbit"><Sparkles size={19} /></div><p className="modal-overline">PULSE ACCOUNT</p><h2>{mode === 'login' ? 'С возвращением' : 'Присоединиться к городу'}<span>.</span></h2><p className="modal-subtitle">{mode === 'login' ? 'Войдите, чтобы сохранять места и добавлять сигналы.' : 'Создайте аккаунт и начните видеть свой город иначе.'}</p><div className="auth-tabs"><button className={mode === 'login' ? 'active' : ''} onClick={() => { setMode('login'); setError('') }}>Войти</button><button className={mode === 'register' ? 'active' : ''} onClick={() => { setMode('register'); setError('') }}>Регистрация</button></div>{mode === 'register' && <label className="input-label">Имя<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Как к вам обращаться?" autoComplete="name" /></label>}<label className="input-label">Email<input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" type="email" autoComplete="email" /></label>{error && <p className="form-error">{error}</p>}{notice && <p className="form-notice">{notice}</p>}<button className="primary-action" disabled={submitting} onClick={() => { void submit() }}>{submitting ? 'Отправляем…' : mode === 'login' ? 'Получить код входа' : 'Получить код регистрации'}<ArrowRight size={16} /></button><p className="auth-disclaimer">Вход выполняется по одноразовой ссылке из письма Supabase Auth. Пароль не нужен.</p></div></ModalFrame>
+  const updateDigit = (index: number, value: string) => {
+    const digit = value.replace(/\D/g, '').slice(-1)
+    const next = [...digits]; next[index] = digit; setDigits(next); setError('')
+    if (digit && index < 5) inputs.current[index + 1]?.focus()
+    if (next.every(Boolean)) window.setTimeout(() => { void submitCode(next.join('')) }, 50)
+  }
+  const submitCode = async (code = digits.join('')) => {
+    setError(''); setSubmitting(true)
+    const result = await verifyOtp(email, code)
+    if (result.error) { setError(result.error); setDigits(['', '', '', '', '', '']); inputs.current[0]?.focus() } else onSuccess()
+    setSubmitting(false)
+  }
+  return <ModalFrame onClose={onClose}><div className="auth-modal"><div className="modal-orbit"><Sparkles size={19} /></div><p className="modal-overline">PULSE ACCOUNT / {step === 'otp' ? 'VERIFY' : 'ACCESS'}</p><h2>{step === 'otp' ? 'Введите код' : mode === 'login' ? 'С возвращением' : 'Присоединиться к городу'}<span>.</span></h2><p className="modal-subtitle">{step === 'otp' ? `Шесть цифр из письма для ${email.trim()}.` : mode === 'login' ? 'Войдите, чтобы сохранять места и добавлять сигналы.' : 'Создайте аккаунт и начните видеть свой город иначе.'}</p>{step === 'email' ? <><div className="auth-tabs"><button className={mode === 'login' ? 'active' : ''} onClick={() => { setMode('login'); setError('') }}>Войти</button><button className={mode === 'register' ? 'active' : ''} onClick={() => { setMode('register'); setError('') }}>Регистрация</button></div>{mode === 'register' && <label className="input-label">Имя<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Как к вам обращаться?" autoComplete="name" /></label>}<label className="input-label">Email<input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" type="email" autoComplete="email" /></label><button className="primary-action" disabled={submitting} onClick={() => { void submitEmail() }}>{submitting ? 'Отправляем…' : 'Получить 6-значный код'}<ArrowRight size={16} /></button></> : <><div className="otp-grid" role="group" aria-label="6-значный код">{digits.map((digit, index) => <input key={index} ref={(element) => { inputs.current[index] = element }} className="otp-cell" inputMode="numeric" maxLength={1} value={digit} onChange={(event) => updateDigit(index, event.target.value)} onKeyDown={(event) => { if (event.key === 'Backspace' && !digits[index] && index > 0) inputs.current[index - 1]?.focus() }} aria-label={`Цифра ${index + 1}`} />)}</div><button className="primary-action" disabled={submitting || digits.some((digit) => !digit)} onClick={() => { void submitCode() }}>{submitting ? 'Проверяем…' : 'Подтвердить код'}<Check size={16} /></button><button className="otp-resend" disabled={submitting} onClick={() => { setStep('email'); setDigits(['', '', '', '', '', '']); setNotice('') }}>Изменить email или отправить заново</button></>}{error && <p className="form-error">{error}</p>}{notice && <p className="form-notice">{notice}</p>}<p className="auth-disclaimer">PULSE использует одноразовый 6-значный код. Пароль и переходы по ссылкам не нужны.</p></div></ModalFrame>
 }
 
 function ReportModal({ coords, onClose, onSubmit }: { coords: { lat: number; lng: number }; onClose: () => void; onSubmit: (payload: { kind: EventKind; title: string; description: string }) => void }) {
@@ -240,13 +258,21 @@ function ReportModal({ coords, onClose, onSubmit }: { coords: { lat: number; lng
 function ProfileModal({ onClose }: { onClose: () => void }) {
   const { user, updateProfile, logout } = useAuth()
   const [name, setName] = useState(user?.name ?? '')
-  const [city, setCity] = useState(user?.city ?? 'Москва')
+  const [city, setCity] = useState(user?.city ?? 'Орск')
   const [notifications, setNotifications] = useState(user?.notifications ?? true)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   if (!user) return null
   const save = async () => { setSaving(true); const result = await updateProfile({ name: name.trim() || user.name, city, notifications }); if (result) setError(result); else onClose(); setSaving(false) }
-  return <ModalFrame onClose={onClose}><div className="profile-modal"><div className="profile-modal-header"><div className="large-avatar">{initials(user.name)}</div><div><p className="modal-overline">МОЙ PULSE</p><h2>{user.name}<span>.</span></h2><span className="profile-email">{user.email}</span></div></div><div className="profile-form"><label className="input-label">Ваше имя<input value={name} onChange={(event) => setName(event.target.value)} /></label><label className="input-label">Родной город<div className="select-wrap"><Navigation size={15} /><select value={city} onChange={(event) => setCity(event.target.value)}><option>Москва</option><option>Орск</option><option>Санкт-Петербург</option><option>Екатеринбург</option><option>Казань</option></select><ChevronDown size={14} /></div></label><button className="setting-toggle" onClick={() => setNotifications((value) => !value)}><span><Bell size={16} /><span><strong>Уведомления рядом</strong><small>Получать важные сигналы в вашем городе</small></span></span><i className={notifications ? 'on' : ''}><b /></i></button></div>{error && <p className="form-error">{error}</p>}<div className="profile-actions"><button className="logout-action" onClick={() => { void logout(); onClose() }}><LogOut size={15} /> Выйти</button><button className="primary-action compact" disabled={saving} onClick={() => { void save() }}>{saving ? 'Сохраняем…' : 'Сохранить'} <Check size={15} /></button></div></div></ModalFrame>
+  return <ModalFrame onClose={onClose}><div className="profile-modal"><div className="profile-modal-header"><div className="large-avatar">{user.avatarUrl ? <img src={user.avatarUrl} alt="" /> : initials(user.name)}</div><div><p className="modal-overline">МОЙ PULSE</p><h2>{user.name}<span>.</span></h2><span className="profile-email">{user.email}</span></div></div><div className="profile-form"><label className="input-label">Ваше имя<input value={name} onChange={(event) => setName(event.target.value)} /></label><label className="input-label">Родной город<div className="select-wrap"><Navigation size={15} /><select value={city} onChange={(event) => setCity(event.target.value)}><option>Орск</option><option>Москва</option><option>Санкт-Петербург</option><option>Екатеринбург</option><option>Казань</option></select><ChevronDown size={14} /></div></label><button className="setting-toggle" onClick={() => setNotifications((value) => !value)}><span><Bell size={16} /><span><strong>Уведомления рядом</strong><small>Получать важные сигналы в вашем городе</small></span></span><i className={notifications ? 'on' : ''}><b /></i></button></div>{error && <p className="form-error">{error}</p>}<div className="profile-actions"><button className="logout-action" onClick={() => { void logout(); onClose() }}><LogOut size={15} /> Выйти</button><button className="primary-action compact" disabled={saving} onClick={() => { void save() }}>{saving ? 'Сохраняем…' : 'Сохранить'} <Check size={15} /></button></div></div></ModalFrame>
+}
+
+function PulseAiPanel({ events, onClose }: { events: RadarEvent[]; onClose: () => void }) {
+  const [typed, setTyped] = useState('')
+  const [question, setQuestion] = useState('')
+  const summary = events.length === 0 ? 'На районе сейчас спокойно. Новых сигналов в видимой области пока нет — самое время добавить наблюдение.' : `В видимой области ${events.length} ${events.length === 1 ? 'сигнал' : 'сигналов'}. ${events.filter((event) => event.kind === 'help').length ? 'Есть соседские предложения помощи.' : 'Бартерных предложений пока не видно.'} Последнее обновление — только что.`
+  useEffect(() => { setTyped(''); let index = 0; const timer = window.setInterval(() => { index += 1; setTyped(summary.slice(0, index)); if (index >= summary.length) window.clearInterval(timer) }, 18); return () => window.clearInterval(timer) }, [summary])
+  return <motion.aside className="ai-panel glass-panel" initial={{ opacity: 0, y: 18, scale: .98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 14, scale: .98 }} transition={spring}><div className="ai-panel-head"><div><span className="ai-kicker"><Bot size={14} /> PULSE AI</span><h2>Что происходит рядом?</h2></div><button className="sheet-close" onClick={onClose} aria-label="Закрыть AI"><X size={17} /></button></div><div className="ai-message"><span className="ai-message-avatar"><Sparkles size={15} /></span><p>{typed}<span className="typing-cursor">▍</span></p></div><div className="ai-suggestions"><button onClick={() => setQuestion('Где сейчас спокойнее?')}>Где спокойнее?</button><button onClick={() => setQuestion('Есть ли помощь рядом?')}>Помощь рядом</button></div><div className="ai-input"><input value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="Спросить про район…" onKeyDown={(event) => { if (event.key === 'Enter' && question.trim()) setQuestion('Пока я умею только читать карту — скоро подключу полный AI-ответ.') }} /><button onClick={() => { if (question.trim()) setQuestion('Пока я умею только читать карту — скоро подключу полный AI-ответ.') }} aria-label="Отправить"><Send size={15} /></button></div></motion.aside>
 }
 
 function NotificationsPanel({ onClose }: { onClose: () => void }) {

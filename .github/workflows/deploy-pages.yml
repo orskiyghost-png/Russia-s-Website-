@@ -33,6 +33,8 @@ jobs:
         env:
           VITE_SUPABASE_URL: https://vavixbintoqoivnswdwe.supabase.co
           VITE_SUPABASE_ANON_KEY: sb_publishable_J_swRh7VMA2JlUZcPlMqHQ_6yTnxfGh
+      - name: Add SPA fallback
+        run: cp dist/index.html dist/404.html
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:

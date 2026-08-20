@@ -15,6 +15,7 @@ export type RadarEvent = {
   lng: number
   createdAt: number
   userName: string
+  avatarUrl?: string | null
   reactions: number
   comments: number
 }
@@ -25,5 +26,6 @@ export type AuthUser = {
   name: string
   city: string
   notifications: boolean
+  avatarUrl?: string | null
   createdAt: number
 }

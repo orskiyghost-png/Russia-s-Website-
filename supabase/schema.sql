@@ -6,7 +6,8 @@ create extension if not exists postgis;
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   name text not null check (char_length(name) between 2 and 80),
-  city text not null default 'Москва',
+  city text not null default 'Орск',
+  avatar_url text,
   notifications boolean not null default true,
   created_at timestamptz not null default now()
 );
@@ -22,6 +23,7 @@ create table if not exists public.events (
   location geography(point, 4326) generated always as (st_setsrid(st_makepoint(lng, lat), 4326)::geography) stored,
   user_id uuid not null references auth.users(id) on delete cascade,
   user_name text not null,
+  avatar_url text,
   reactions integer not null default 0 check (reactions >= 0),
   comments integer not null default 0 check (comments >= 0),
   created_at timestamptz not null default now()
@@ -29,6 +31,9 @@ create table if not exists public.events (
 
 create index if not exists events_location_idx on public.events using gist (location);
 create index if not exists events_created_at_idx on public.events (created_at desc);
+
+alter table public.profiles add column if not exists avatar_url text;
+alter table public.events add column if not exists avatar_url text;
 
 alter table public.profiles enable row level security;
 alter table public.events enable row level security;
@@ -49,8 +54,8 @@ language plpgsql
 security definer set search_path = public
 as $$
 begin
-  insert into public.profiles (id, name)
-  values (new.id, coalesce(nullif(new.raw_user_meta_data ->> 'name', ''), split_part(new.email, '@', 1)))
+  insert into public.profiles (id, name, avatar_url)
+  values (new.id, coalesce(nullif(new.raw_user_meta_data ->> 'name', ''), split_part(new.email, '@', 1)), nullif(new.raw_user_meta_data ->> 'avatar_url', ''))
   on conflict (id) do nothing;
   return new;
 end;
@@ -83,8 +88,8 @@ begin
   if recent_count >= 5 then raise exception 'RATE_LIMIT'; end if;
   if char_length(trim(p_title)) < 3 or char_length(trim(p_description)) < 3 then raise exception 'INVALID_CONTENT'; end if;
 
-  insert into public.events (kind, category, title, description, lat, lng, user_id, user_name)
-  select p_kind, p_category, trim(p_title), trim(p_description), p_lat, p_lng, auth.uid(), profiles.name
+  insert into public.events (kind, category, title, description, lat, lng, user_id, user_name, avatar_url)
+  select p_kind, p_category, trim(p_title), trim(p_description), p_lat, p_lng, auth.uid(), profiles.name, profiles.avatar_url
   from public.profiles where profiles.id = auth.uid()
   returning * into new_event;
   return new_event;

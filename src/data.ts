@@ -37,19 +37,23 @@ type EventRow = {
   lng: number
   created_at: string
   user_name: string
+  avatar_url?: string | null
   reactions: number
   comments: number
 }
 
 function fromRow(row: EventRow): RadarEvent {
-  return { id: row.id, kind: row.kind, category: row.category, title: row.title, description: row.description, location: `${row.lat.toFixed(4)}, ${row.lng.toFixed(4)}`, lat: row.lat, lng: row.lng, createdAt: new Date(row.created_at).getTime(), userName: row.user_name, reactions: row.reactions, comments: row.comments }
+  return { id: row.id, kind: row.kind, category: row.category, title: row.title, description: row.description, location: `${row.lat.toFixed(4)}, ${row.lng.toFixed(4)}`, lat: row.lat, lng: row.lng, createdAt: new Date(row.created_at).getTime(), userName: row.user_name, avatarUrl: row.avatar_url ?? null, reactions: row.reactions, comments: row.comments }
 }
 
 export async function fetchEvents(): Promise<{ events: RadarEvent[]; configured: boolean }> {
   if (!isSupabaseConfigured) return { events: seedEvents, configured: false }
-  const { data, error } = await supabase.from('events').select('id, kind, category, title, description, lat, lng, created_at, user_name, reactions, comments').order('created_at', { ascending: false }).limit(100)
-  if (error) throw error
-  return { events: (data as EventRow[]).map(fromRow), configured: true }
+  const primary = await supabase.from('events').select('id, kind, category, title, description, lat, lng, created_at, user_name, avatar_url, reactions, comments').order('created_at', { ascending: false }).limit(100)
+  if (!primary.error) return { events: (primary.data as EventRow[]).map(fromRow), configured: true }
+  if (!primary.error.message.toLowerCase().includes('avatar_url')) throw primary.error
+  const legacy = await supabase.from('events').select('id, kind, category, title, description, lat, lng, created_at, user_name, reactions, comments').order('created_at', { ascending: false }).limit(100)
+  if (legacy.error) throw legacy.error
+  return { events: (legacy.data as EventRow[]).map(fromRow), configured: true }
 }
 
 export function subscribeToEvents(onChange: () => void): () => void {
