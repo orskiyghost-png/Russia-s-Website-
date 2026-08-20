@@ -170,7 +170,7 @@ function App() {
       </div>
     </header>
 
-    <AnimatePresence initial={false}><motion.aside className={`layer-rail glass-panel ${isMenuOpen ? 'open' : ''}`} initial={false} animate={isMenuOpen ? { x: 0, opacity: 1 } : { x: 0, opacity: 1 }} transition={{ type: 'spring', damping: 25, stiffness: 200 }}>
+    <AnimatePresence initial={false}><motion.aside className={`layer-rail glass-panel ${isMenuOpen ? 'open' : ''}`} initial={false} animate={{ x: isMenuOpen ? 0 : '-125%', opacity: isMenuOpen ? 1 : 0 }} transition={{ type: 'spring', damping: 25, stiffness: 200 }} aria-hidden={!isMenuOpen}>
       <div className="rail-heading"><span>СЛОИ РАДАРА</span><button onClick={() => setIsMenuOpen(false)}><X size={15} /></button></div>
       {layerConfig.map((layer) => { const LayerIcon = layer.icon; return <motion.button key={layer.id} whileTap={{ scale: 0.97 }} className={`layer-button ${activeLayer === layer.id ? 'active' : ''}`} onClick={() => { setActiveLayer(layer.id); setIsMenuOpen(false) }}><span className={`layer-symbol ${layer.color}`}><LayerIcon size={16} /></span><span>{layer.label}</span>{layer.id === 'all' && <b>{events.length}</b>}</motion.button> })}
       <div className="rail-divider" />
