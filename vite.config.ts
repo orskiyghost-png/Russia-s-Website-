@@ -7,6 +7,6 @@ const isGithubActions = Boolean(runtime.process?.env?.GITHUB_ACTIONS)
 export default defineConfig({
   base: isGithubActions ? '/Russia-s-Website-/' : '/',
   plugins: [react()],
-  server: { host: '0.0.0.0', hmr: false },
+  server: { host: '0.0.0.0', hmr: false, allowedHosts: true },
   preview: { host: '0.0.0.0', allowedHosts: true },
 })

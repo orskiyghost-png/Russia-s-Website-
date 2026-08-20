@@ -5,9 +5,9 @@ type ThemeContextValue = { theme: Theme; toggleTheme: () => void; setTheme: (the
 const ThemeContext = createContext<ThemeContextValue | undefined>(undefined)
 
 function initialTheme(): Theme {
-  const stored = window.localStorage.getItem('pulse-theme')
-  if (stored === 'light' || stored === 'dark') return stored
-  return window.matchMedia?.('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
+  // PULSE currently ships one public visual system: light mode.
+  // Keep the context API so future theme work does not require an architectural rewrite.
+  return 'light'
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
@@ -17,9 +17,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     document.documentElement.style.colorScheme = theme
     window.localStorage.setItem('pulse-theme', theme)
     const meta = document.querySelector('meta[name="theme-color"]')
-    meta?.setAttribute('content', theme === 'light' ? '#eef2f4' : '#07090d')
+    meta?.setAttribute('content', '#f7f8fa')
   }, [theme])
-  const value = useMemo(() => ({ theme, setTheme, toggleTheme: () => setTheme((current) => current === 'dark' ? 'light' : 'dark') }), [theme])
+  const value = useMemo(() => ({ theme, setTheme, toggleTheme: () => setTheme('light') }), [theme])
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>
 }
 

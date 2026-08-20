@@ -38,8 +38,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const nextUser = await hydrateUser(session.user)
       if (mounted) setUser(nextUser)
     }
-    void supabase.auth.getSession().then(({ data }) => applySession(data.session)).finally(() => { if (mounted) setLoading(false) })
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => { window.setTimeout(() => { void applySession(session) }, 0) })
+    const completeAuthCallback = async () => {
+      const params = new URLSearchParams(window.location.search)
+      const tokenHash = params.get('token_hash')
+      if (!tokenHash) return
+      const { data, error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type: 'email' })
+      if (!error && data.session) await applySession(data.session)
+      // Never leave a stale confirmation token in the address bar or send the user to a dead route.
+      const cleanUrl = `${window.location.pathname}${window.location.hash}`
+      window.history.replaceState({}, document.title, cleanUrl || '/')
+    }
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      window.setTimeout(() => { void applySession(session) }, 0)
+    })
+    void completeAuthCallback()
+      .then(() => supabase.auth.getSession())
+      .then(({ data }) => applySession(data.session))
+      .finally(() => { if (mounted) setLoading(false) })
     return () => { mounted = false; listener.subscription.unsubscribe() }
   }, [])
 
@@ -48,14 +63,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     login: async (email) => {
       if (!isSupabaseConfigured) return { error: 'Добавьте VITE_SUPABASE_URL и VITE_SUPABASE_ANON_KEY в Environment' }
       if (!validEmail(email)) return { error: 'Проверьте формат email' }
-      const { error } = await supabase.auth.signInWithOtp({ email: email.trim(), options: { shouldCreateUser: false } })
+      const { error } = await supabase.auth.signInWithOtp({ email: email.trim(), options: { shouldCreateUser: false, emailRedirectTo: window.location.origin } })
       return error ? { error: translateAuthError(error.message) } : { error: null, needsVerification: true }
     },
     register: async (name, email) => {
       if (!isSupabaseConfigured) return { error: 'Добавьте VITE_SUPABASE_URL и VITE_SUPABASE_ANON_KEY в Environment' }
       if (name.trim().length < 2) return { error: 'Введите имя от 2 символов' }
       if (!validEmail(email)) return { error: 'Проверьте формат email' }
-      const { error } = await supabase.auth.signInWithOtp({ email: email.trim(), options: { shouldCreateUser: true, data: { name: name.trim() } } })
+      const { error } = await supabase.auth.signInWithOtp({ email: email.trim(), options: { shouldCreateUser: true, emailRedirectTo: window.location.origin, data: { name: name.trim() } } })
       return error ? { error: translateAuthError(error.message) } : { error: null, needsVerification: true }
     },
     verifyOtp: async (email, token) => {
@@ -79,8 +94,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 function translateAuthError(message: string) {
   const normalized = message.toLowerCase()
-  if (normalized.includes('error sending magic link email') || normalized.includes('error sending email') || normalized.includes('smtp')) return 'Письмо не отправлено: в Supabase нужно включить встроенный SMTP или подтвердить домен Resend.'
-  if (normalized.includes('invalid') && normalized.includes('token')) return 'Код истёк или введён неверно'
+  if (normalized.includes('error sending magic link email') || normalized.includes('error sending email') || normalized.includes('smtp')) return 'Письмо не отправлено: проверьте Email provider и SMTP в Supabase.'
+  if (normalized.includes('invalid') && normalized.includes('token')) return 'Код истёк или введён неверно. Запросите новый код'
   if (normalized.includes('expired')) return 'Срок действия кода истёк. Запросите новый код'
   if (normalized.includes('email not confirmed')) return 'Подтвердите email кодом из письма'
   if (normalized.includes('email rate limit') || normalized.includes('rate limit')) return 'Слишком много попыток. Попробуйте позже'

@@ -8,7 +8,7 @@ PULSE — гиперлокальная карта городских сигна�
 - Перемещение, zoom, popups, кастомные pulse-маркеры и клики по карте.
 - Поиск городов через Nominatim с плавным перелётом карты.
 - Browser Geolocation API.
-- Supabase Auth: email/password, подтверждение email, session refresh и logout.
+- Supabase Auth: passwordless Email OTP, подтверждение 6-значным кодом, session refresh и logout.
 - Supabase Postgres: общие события для всех пользователей.
 - Supabase Realtime: новые события синхронизируются между открытыми клиентами.
 - Database-side anti-spam: максимум 5 событий за 10 минут на пользователя.
@@ -33,11 +33,11 @@ PULSE — гиперлокальная карта городских сигна�
    - `VITE_SUPABASE_URL`
    - `VITE_SUPABASE_ANON_KEY`
 2. Выполните `supabase/schema.sql` в Supabase SQL Editor.
-3. Включите **Authentication → Providers → Email → Confirm email** и настройте Site URL / Redirect URLs.
+3. Включите **Authentication → Providers → Email**, разрешите регистрацию, проверьте Confirm email и настройте Site URL / Redirect URLs. Для OTP-шаблона письмо должно содержать `{{ .Token }}`; не используйте GitHub repository URL как redirect URL.
 
 Service-role key не нужен фронтенду и не должен добавляться в `VITE_` переменные.
 
-До добавления ключей preview остаётся доступным в read-only режиме с seed-картой. Авторизация и публикация событий активируются автоматически после добавления Supabase env vars.
+До добавления ключей preview остаётся доступным в read-only режиме с seed-картой. Авторизация и публикация событий активируются автоматически после добавления Supabase env vars. Пользовательский интерфейс PULSE работает в единственной светлой теме; переключатель dark/light отключён.
 
 ## Запуск и проверка
 

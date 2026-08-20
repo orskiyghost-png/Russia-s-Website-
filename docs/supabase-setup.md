@@ -8,11 +8,11 @@
 
 ## Настройка Email OTP
 
-В **Authentication → Providers → Email** включите Email provider и разрешите регистрацию пользователей, если PULSE должен принимать новые аккаунты. В **Authentication → URL Configuration** укажите Site URL и Redirect URLs для preview- и production-доменов приложения. В шаблоне письма Supabase должен отображаться `{{ .Token }}`, поскольку PULSE использует одноразовый **6-значный код**, а не переход по Magic Link.
+В **Authentication → Providers → Email** включите Email provider и разрешите регистрацию пользователей, если PULSE должен принимать новые аккаунты. Для текущего production PULSE в **Authentication → URL Configuration** задан Site URL `https://orskiyghost-png.github.io/Russia-s-Website` и добавлен такой же Redirect URL. Не используйте URL GitHub repository (`github.com/...`) как redirect. В **Authentication → Emails → Magic link or OTP** письмо должно содержать `{{ .Token }}`, поскольку PULSE использует одноразовый **6-значный код**, а не переход по Magic Link. Панель Supabase показывает, что редактирование текста шаблона доступно после настройки custom SMTP; до этого отправляются default templates. Поэтому при необходимости гарантировать отображение кода подключите SMTP/Resend и сохраните `{{ .Token }}` в шаблоне.
 
 На стороне фронтенда используются `VITE_SUPABASE_URL` из **Project Settings → API → Project URL** и `VITE_SUPABASE_ANON_KEY` из **Project Settings → API → Publishable/anon key**. Service-role key нельзя помещать в браузер или в переменные `VITE_`.
 
-PULSE вызывает `signInWithOtp()` для отправки кода и `verifyOtp({ email, token, type: 'email' })` для подтверждения. После первого входа имя передаётся в metadata, а триггер `handle_new_user` создаёт профиль. Добавление событий выполняется через `create_event()`, а изменения `events` приходят через Supabase Realtime.
+PULSE вызывает `signInWithOtp()` для отправки кода и `verifyOtp({ email, token, type: 'email' })` для подтверждения. Если пользователь откроет старую ссылку с `token_hash`, AuthProvider дополнительно обработает её через `verifyOtp({ token_hash, type: 'email' })`, очистит query string и не оставит пользователя на мёртвом callback URL. После первого входа имя передаётся в metadata, а триггер `handle_new_user` создаёт профиль. Добавление событий выполняется через `create_event()`, а изменения `events` приходят через Supabase Realtime.
 
 ### О предупреждении `public.spatial_ref_sys`
 
