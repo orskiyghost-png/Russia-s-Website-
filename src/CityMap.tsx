@@ -64,8 +64,8 @@ const EventMarker = memo(function EventMarker({ event, selectedId, onSelect }: {
 })
 
 export function CityMap({ center, events, selectedId, theme, onSelect, onMapClick }: CityMapProps) {
-  const tileUrl = theme === 'dark' ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png' : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
-  const attribution = theme === 'dark' ? '&copy; <a href="https://carto.com/attributions" target="_blank" rel="noreferrer">CARTO</a> &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a>' : '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors'
+  const tileUrl = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
+  const attribution = '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors'
   return <MapContainer center={center as LatLngExpression} zoom={12} minZoom={3} maxZoom={19} zoomControl={false} scrollWheelZoom preferCanvas className="real-map"><TileLayer attribution={attribution} url={tileUrl} updateWhenIdle updateWhenZooming={false} keepBuffer={2} /><ZoomControl position="bottomright" /><MapViewport center={center} /><MapClickCapture onMapClick={onMapClick} />{events.map((event) => <EventMarker key={event.id} event={event} selectedId={selectedId} onSelect={onSelect} />)}</MapContainer>
 }
 
