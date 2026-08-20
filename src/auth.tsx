@@ -3,16 +3,14 @@ import type { Session, User as SupabaseUser } from '@supabase/supabase-js'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
 import type { AuthUser } from './types'
 
-type AuthResult = { error: string | null; needsVerification?: boolean }
-type VerifyResult = { error: string | null }
+type AuthResult = { error: string | null }
 type AuthContextValue = {
   user: AuthUser | null
   loading: boolean
   configured: boolean
-  login: (email: string) => Promise<AuthResult>
-  register: (name: string, email: string) => Promise<AuthResult>
-  verifyOtp: (email: string, token: string) => Promise<VerifyResult>
-  signInAnonymously: () => Promise<{ error: string | null }>
+  login: (email: string, password: string) => Promise<AuthResult>
+  register: (name: string, email: string, password: string, captchaToken: string) => Promise<AuthResult>
+  signInAnonymously: () => Promise<AuthResult>
   updateProfile: (updates: Partial<Pick<AuthUser, 'name' | 'city' | 'notifications'>>) => Promise<string | null>
   logout: () => Promise<void>
 }
@@ -22,39 +20,15 @@ type ProfileRow = { name: string; city: string; notifications: boolean; created_
 type ExtendedSupabaseUser = SupabaseUser & { is_anonymous?: boolean }
 
 function validEmail(email: string) { return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim()) }
-
-function appRedirectUrl() {
-  return new URL(import.meta.env.BASE_URL || '/', window.location.origin).toString()
-}
-
-function isAnonymousUser(sessionUser: SupabaseUser) {
-  const user = sessionUser as ExtendedSupabaseUser
-  return user.is_anonymous === true || sessionUser.app_metadata?.is_anonymous === true || sessionUser.app_metadata?.provider === 'anonymous'
-}
-
-function authProviderFor(sessionUser: SupabaseUser): AuthUser['authProvider'] {
-  if (isAnonymousUser(sessionUser)) return 'anonymous'
-  const provider = sessionUser.app_metadata?.provider ?? sessionUser.identities?.[0]?.provider
-  if (provider === 'email') return 'email'
-  return 'unknown'
-}
+function isAnonymousUser(sessionUser: SupabaseUser) { const user = sessionUser as ExtendedSupabaseUser; return user.is_anonymous === true || sessionUser.app_metadata?.is_anonymous === true || sessionUser.app_metadata?.provider === 'anonymous' }
+function authProviderFor(sessionUser: SupabaseUser): AuthUser['authProvider'] { if (isAnonymousUser(sessionUser)) return 'anonymous'; return sessionUser.app_metadata?.provider === 'email' ? 'email' : 'unknown' }
 
 async function hydrateUser(sessionUser: SupabaseUser): Promise<AuthUser> {
   const anonymous = isAnonymousUser(sessionUser)
   const { data } = anonymous ? { data: null } : await supabase.from('profiles').select('name, city, notifications, created_at, avatar_url').eq('id', sessionUser.id).maybeSingle()
   const profile = data as ProfileRow | null
-  const fallbackName = anonymous ? 'Гость' : sessionUser.user_metadata.name ?? sessionUser.email?.split('@')[0] ?? 'Гость'
-  return {
-    id: sessionUser.id,
-    email: sessionUser.email ?? '',
-    name: profile?.name ?? fallbackName,
-    city: profile?.city ?? 'Орск',
-    notifications: profile?.notifications ?? true,
-    avatarUrl: profile?.avatar_url ?? sessionUser.user_metadata.avatar_url ?? null,
-    createdAt: profile ? new Date(profile.created_at).getTime() : Date.now(),
-    isAnonymous: anonymous,
-    authProvider: authProviderFor(sessionUser),
-  }
+  const fallbackName = anonymous ? 'Гость' : sessionUser.user_metadata.name ?? sessionUser.email?.split('@')[0] ?? 'Пользователь'
+  return { id: sessionUser.id, email: sessionUser.email ?? '', name: profile?.name ?? fallbackName, city: profile?.city ?? 'Орск', notifications: profile?.notifications ?? true, avatarUrl: profile?.avatar_url ?? sessionUser.user_metadata.avatar_url ?? null, createdAt: profile ? new Date(profile.created_at).getTime() : Date.now(), isAnonymous: anonymous, authProvider: authProviderFor(sessionUser) }
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -69,33 +43,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const nextUser = await hydrateUser(session.user)
       if (mounted) setUser(nextUser)
     }
-
-    const completeAuthCallback = async () => {
-      const params = new URLSearchParams(window.location.search)
-      const code = params.get('code')
-      const tokenHash = params.get('token_hash')
-      let exchanged = false
-      if (code) {
-        const { data } = await supabase.auth.exchangeCodeForSession(code)
-        if (data.session) { exchanged = true; await applySession(data.session) }
-      } else if (tokenHash) {
-        const { data } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type: 'email' })
-        if (data.session) { exchanged = true; await applySession(data.session) }
-      }
-      if (exchanged) {
-        const basePath = new URL(import.meta.env.BASE_URL || '/', window.location.origin).pathname
-        const cleanPath = window.location.pathname.startsWith(basePath) ? window.location.pathname : basePath
-        window.history.replaceState({}, document.title, cleanPath)
-      }
-    }
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      window.setTimeout(() => { void applySession(session) }, 0)
-    })
-    void completeAuthCallback()
-      .then(() => supabase.auth.getSession())
-      .then(({ data }) => applySession(data.session))
-      .finally(() => { if (mounted) setLoading(false) })
-
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => { window.setTimeout(() => { void applySession(session) }, 0) })
+    void supabase.auth.getSession().then(({ data }) => applySession(data.session)).finally(() => { if (mounted) setLoading(false) })
     return () => { mounted = false; listener.subscription.unsubscribe() }
   }, [])
 
@@ -103,29 +52,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     user,
     loading,
     configured: isSupabaseConfigured,
-    login: async (email) => {
-      if (!isSupabaseConfigured) return { error: 'Добавьте VITE_SUPABASE_URL и VITE_SUPABASE_ANON_KEY в Environment' }
+    login: async (email, password) => {
+      if (!isSupabaseConfigured) return { error: 'Добавьте Supabase environment variables' }
       if (!validEmail(email)) return { error: 'Проверьте формат email' }
-
-      const { error } = await supabase.auth.signInWithOtp({ email: email.trim(), options: { shouldCreateUser: false, emailRedirectTo: appRedirectUrl() } })
-
-      return error ? { error: translateAuthError(error.message) } : { error: null, needsVerification: true }
+      if (password.length < 6) return { error: 'Пароль должен содержать минимум 6 символов' }
+      const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password })
+      return error ? { error: translateAuthError(error.message) } : { error: null }
     },
-    register: async (name, email) => {
-      if (!isSupabaseConfigured) return { error: 'Добавьте VITE_SUPABASE_URL и VITE_SUPABASE_ANON_KEY в Environment' }
+    register: async (name, email, password, captchaToken) => {
+      if (!isSupabaseConfigured) return { error: 'Добавьте Supabase environment variables' }
       if (name.trim().length < 2) return { error: 'Введите имя от 2 символов' }
       if (!validEmail(email)) return { error: 'Проверьте формат email' }
-
-      const { error } = await supabase.auth.signInWithOtp({ email: email.trim(), options: { shouldCreateUser: true, emailRedirectTo: appRedirectUrl(), data: { name: name.trim() } } })
-
-      return error ? { error: translateAuthError(error.message) } : { error: null, needsVerification: true }
-    },
-    verifyOtp: async (email, token) => {
-      if (!isSupabaseConfigured) return { error: 'Supabase не настроен' }
-      if (!validEmail(email)) return { error: 'Проверьте email' }
-      if (!/^\d{6}$/.test(token.trim())) return { error: 'Введите 6-значный код из письма' }
-      const { error } = await supabase.auth.verifyOtp({ email: email.trim(), token: token.trim(), type: 'email' })
-      return error ? { error: translateAuthError(error.message) } : { error: null }
+      if (password.length < 6) return { error: 'Пароль должен содержать минимум 6 символов' }
+      if (!captchaToken) return { error: 'Пройдите CAPTCHA перед регистрацией' }
+      const { data, error } = await supabase.auth.signUp({ email: email.trim(), password, options: { captchaToken, data: { name: name.trim() } } })
+      if (error) return { error: translateAuthError(error.message) }
+      if (!data.session) return { error: 'Аккаунт создан, но Supabase всё ещё требует подтверждение email. Отключите Confirm email в Auth Settings.' }
+      return { error: null }
     },
     signInAnonymously: async () => {
       if (!isSupabaseConfigured) return { error: 'Supabase не настроен' }
@@ -146,19 +89,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 function translateAuthError(message: string) {
   const normalized = message.toLowerCase()
-  if (normalized.includes('error sending magic link email') || normalized.includes('error sending email') || normalized.includes('error sending confirmation email') || normalized.includes('smtp')) return 'Supabase вернул ошибку отправки письма. Проверьте SMTP/Resend sender в настройках проекта.'
-  if (normalized.includes('invalid') && normalized.includes('token')) return 'Код истёк или введён неверно. Запросите новый код'
-  if (normalized.includes('expired')) return 'Срок действия кода истёк. Запросите новый код'
-  if (normalized.includes('email not confirmed')) return 'Подтвердите email кодом из письма'
-  if (normalized.includes('email rate limit') || normalized.includes('rate limit') || normalized.includes('too many') || normalized.includes('over_email')) return 'Сейчас временно недоступна отправка писем. Попробуйте ещё раз позже.'
-  if (normalized.includes('anonymous')) return 'Временная гостевая сессия сейчас недоступна. Попробуйте ещё раз позже.'
-  if (normalized.includes('user not found')) return 'Пользователь не найден. Выберите регистрацию'
-  if (normalized.includes('signups not allowed')) return 'Регистрация отключена в настройках Supabase'
+  if (normalized.includes('invalid login credentials') || normalized.includes('invalid password') || normalized.includes('user not found')) return 'Неверный email или пароль'
+  if (normalized.includes('already registered') || normalized.includes('user already exists')) return 'Аккаунт с этим email уже существует. Войдите во вкладке «Вход».'
+  if (normalized.includes('password')) return 'Пароль должен содержать минимум 6 символов'
+  if (normalized.includes('captcha')) return 'CAPTCHA не пройдена. Выполните проверку ещё раз.'
+  if (normalized.includes('signup') && normalized.includes('disabled')) return 'Регистрация отключена в настройках Supabase'
+  if (normalized.includes('email')) return 'Проверьте email и повторите попытку'
+  if (normalized.includes('anonymous')) return 'Гостевой режим временно недоступен'
   return message
 }
 
-export function useAuth() {
-  const value = useContext(AuthContext)
-  if (!value) throw new Error('useAuth must be used inside AuthProvider')
-  return value
-}
+export function useAuth() { const value = useContext(AuthContext); if (!value) throw new Error('useAuth must be used inside AuthProvider'); return value }

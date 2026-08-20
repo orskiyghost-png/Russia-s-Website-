@@ -538,3 +538,9 @@ html[data-theme='dark'] .real-map .leaflet-tile-pane {
 .search-spinner { width:11px; height:11px; border:1.5px solid currentColor; border-right-color:transparent; border-radius:50%; animation:search-spin .7s linear infinite; }
 @keyframes search-spin { to { transform:rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .search-spinner { animation:none; } }
+
+
+.captcha-widget { min-height:65px; display:flex; align-items:center; justify-content:flex-start; margin:12px 0 4px; overflow:hidden; border-radius:10px; }
+.captcha-missing { margin:10px 0 4px; padding:10px 12px; color:var(--amber); background:color-mix(in srgb, var(--amber) 12%, transparent); border:1px solid color-mix(in srgb, var(--amber) 28%, transparent); border-radius:10px; font-size:11px; line-height:1.4; }
+.guest-auth-button { margin-top:10px; }
+@media (max-width:700px) { .captcha-widget { transform-origin:left center; transform:scale(.9); width:111%; } }
