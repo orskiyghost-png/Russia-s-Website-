@@ -54,6 +54,7 @@ language plpgsql
 security definer set search_path = public
 as $$
 begin
+  if coalesce(new.raw_app_meta_data ->> 'provider', '') = 'anonymous' then return new; end if;
   insert into public.profiles (id, name, avatar_url)
   values (new.id, coalesce(nullif(new.raw_user_meta_data ->> 'name', ''), split_part(new.email, '@', 1)), nullif(new.raw_user_meta_data ->> 'avatar_url', ''))
   on conflict (id) do nothing;
@@ -83,6 +84,7 @@ declare
   recent_count integer;
 begin
   if auth.uid() is null then raise exception 'AUTH_REQUIRED'; end if;
+  if coalesce((auth.jwt() ->> 'is_anonymous')::boolean, false) then raise exception 'PERMANENT_ACCOUNT_REQUIRED'; end if;
   select count(*) into recent_count from public.events
     where user_id = auth.uid() and created_at > now() - interval '10 minutes';
   if recent_count >= 5 then raise exception 'RATE_LIMIT'; end if;

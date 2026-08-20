@@ -28,4 +28,6 @@ export type AuthUser = {
   notifications: boolean
   avatarUrl?: string | null
   createdAt: number
+  isAnonymous: boolean
+  authProvider: 'google' | 'email' | 'anonymous' | 'unknown'
 }

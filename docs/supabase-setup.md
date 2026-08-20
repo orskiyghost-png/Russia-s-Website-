@@ -17,3 +17,20 @@ PULSE вызывает `signInWithOtp()` для отправки кода и `ve
 ### О предупреждении `public.spatial_ref_sys`
 
 PostGIS создаёт `public.spatial_ref_sys` как служебную таблицу расширения. В проекте PULSE она не используется фронтендом. Supabase владеет этой managed-таблицей, поэтому попытка выполнить `ALTER TABLE public.spatial_ref_sys ENABLE ROW LEVEL SECURITY` возвращает `must be owner of table`. Это предупреждение Security Advisor относится к инфраструктурной таблице расширения, а не к данным PULSE; на таблицах приложения (`profiles` и `events`) RLS включён.
+
+
+## Архитектура доступа PULSE
+
+PULSE использует три уровня доступа. **Guest** не имеет Supabase session и может полностью смотреть карту, искать города, двигать карту, использовать zoom/geolocation и читать события. **Anonymous session** создаётся через `supabase.auth.signInAnonymously()` и является временной сессией на этом устройстве; она не считается постоянным аккаунтом и не обещает восстановление на другом устройстве. **Permanent account** создаётся через Google OAuth или Email OTP.
+
+Google OAuth является первым визуальным действием в auth-модалке. В Supabase нужно включить Google provider и указать Client ID и Client Secret из Google Cloud Console. В Google Cloud OAuth client добавьте callback URL Supabase, который показывается в карточке Google provider. В Supabase Authentication → URL Configuration сохраните production URL `https://orskiyghost-png.github.io/Russia-s-Website-/`. Frontend передаёт этот URL через `redirectTo`, используя `import.meta.env.BASE_URL`, поэтому OAuth не должен возвращать пользователя в корень GitHub Pages или в repository URL.
+
+Email OTP остаётся резервным способом входа: email → 6 цифр → `verifyOtp()`. При серверном rate limit интерфейс сообщает, что отправка писем временно недоступна, и предлагает Google. Frontend guard защищает от повторных кликов, но не снимает серверную квоту Supabase.
+
+Для production рекомендуется Custom SMTP. SMTP credentials нельзя хранить в репозитории, в `.env` фронтенда или в `VITE_` переменных. Без Custom SMTP встроенный provider проекта может ограничивать отправку auth-писем примерно двумя письмами в час, а увеличение лимита в панели Supabase недоступно.
+
+## Anonymous RLS и публикация сигналов
+
+Anonymous users используют PostgreSQL role `authenticated`, поэтому одной проверки роли недостаточно. Функция `public.create_event()` дополнительно проверяет `auth.jwt() ->> 'is_anonymous'` и отклоняет anonymous session с ошибкой `PERMANENT_ACCOUNT_REQUIRED`. Публичное чтение `events` сохраняется. Постоянный сигнал может создать только permanent account с профилем.
+
+После включения anonymous sign-ins в панели Supabase примените миграцию `supabase/migrations/20260820_anonymous_access.sql` в SQL Editor. Она идемпотентно обновляет только RPC `create_event()` и не заменяет таблицы, RLS или Realtime.

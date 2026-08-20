@@ -12,18 +12,15 @@ type AuthContextValue = {
   login: (email: string) => Promise<AuthResult>
   register: (name: string, email: string) => Promise<AuthResult>
   verifyOtp: (email: string, token: string) => Promise<VerifyResult>
+  signInWithGoogle: () => Promise<{ error: string | null }>
+  signInAnonymously: () => Promise<{ error: string | null }>
   updateProfile: (updates: Partial<Pick<AuthUser, 'name' | 'city' | 'notifications'>>) => Promise<string | null>
   logout: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined)
 type ProfileRow = { name: string; city: string; notifications: boolean; created_at: string; avatar_url?: string | null }
-
-async function hydrateUser(sessionUser: SupabaseUser): Promise<AuthUser> {
-  const { data } = await supabase.from('profiles').select('name, city, notifications, created_at, avatar_url').eq('id', sessionUser.id).maybeSingle()
-  const profile = data as ProfileRow | null
-  return { id: sessionUser.id, email: sessionUser.email ?? '', name: profile?.name ?? sessionUser.user_metadata.name ?? sessionUser.email?.split('@')[0] ?? 'Гость', city: profile?.city ?? 'Орск', notifications: profile?.notifications ?? true, avatarUrl: profile?.avatar_url ?? sessionUser.user_metadata.avatar_url ?? null, createdAt: profile ? new Date(profile.created_at).getTime() : Date.now() }
-}
+type ExtendedSupabaseUser = SupabaseUser & { is_anonymous?: boolean }
 
 function validEmail(email: string) { return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim()) }
 
@@ -31,9 +28,41 @@ function appRedirectUrl() {
   return new URL(import.meta.env.BASE_URL || '/', window.location.origin).toString()
 }
 
+function isAnonymousUser(sessionUser: SupabaseUser) {
+  const user = sessionUser as ExtendedSupabaseUser
+  return user.is_anonymous === true || sessionUser.app_metadata?.is_anonymous === true || sessionUser.app_metadata?.provider === 'anonymous'
+}
+
+function authProviderFor(sessionUser: SupabaseUser): AuthUser['authProvider'] {
+  if (isAnonymousUser(sessionUser)) return 'anonymous'
+  const provider = sessionUser.app_metadata?.provider ?? sessionUser.identities?.[0]?.provider
+  if (provider === 'google') return 'google'
+  if (provider === 'email') return 'email'
+  return 'unknown'
+}
+
+async function hydrateUser(sessionUser: SupabaseUser): Promise<AuthUser> {
+  const anonymous = isAnonymousUser(sessionUser)
+  const { data } = anonymous ? { data: null } : await supabase.from('profiles').select('name, city, notifications, created_at, avatar_url').eq('id', sessionUser.id).maybeSingle()
+  const profile = data as ProfileRow | null
+  const fallbackName = anonymous ? 'Гость' : sessionUser.user_metadata.name ?? sessionUser.email?.split('@')[0] ?? 'Гость'
+  return {
+    id: sessionUser.id,
+    email: sessionUser.email ?? '',
+    name: profile?.name ?? fallbackName,
+    city: profile?.city ?? 'Орск',
+    notifications: profile?.notifications ?? true,
+    avatarUrl: profile?.avatar_url ?? sessionUser.user_metadata.avatar_url ?? null,
+    createdAt: profile ? new Date(profile.created_at).getTime() : Date.now(),
+    isAnonymous: anonymous,
+    authProvider: authProviderFor(sessionUser),
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null)
   const [loading, setLoading] = useState(true)
+
   useEffect(() => {
     if (!isSupabaseConfigured) { setLoading(false); return }
     let mounted = true
@@ -45,14 +74,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const completeAuthCallback = async () => {
       const params = new URLSearchParams(window.location.search)
       const tokenHash = params.get('token_hash')
-      if (!tokenHash) return
-      const { data, error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type: 'email' })
-      if (!error && data.session) await applySession(data.session)
-      // Never leave a stale confirmation token in the address bar or send the user to a dead route.
-      const basePath = new URL(import.meta.env.BASE_URL || '/', window.location.origin).pathname
-      const cleanPath = window.location.pathname.startsWith(basePath) ? window.location.pathname : basePath
-      const cleanUrl = `${cleanPath}${window.location.hash}`
-      window.history.replaceState({}, document.title, cleanUrl || basePath)
+      if (tokenHash) {
+        const { data } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type: 'email' })
+        if (data.session) await applySession(data.session)
+        const basePath = new URL(import.meta.env.BASE_URL || '/', window.location.origin).pathname
+        const cleanPath = window.location.pathname.startsWith(basePath) ? window.location.pathname : basePath
+        window.history.replaceState({}, document.title, `${cleanPath}${window.location.hash}`)
+      }
     }
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       window.setTimeout(() => { void applySession(session) }, 0)
@@ -65,7 +93,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const value = useMemo<AuthContextValue>(() => ({
-    user, loading, configured: isSupabaseConfigured,
+    user,
+    loading,
+    configured: isSupabaseConfigured,
     login: async (email) => {
       if (!isSupabaseConfigured) return { error: 'Добавьте VITE_SUPABASE_URL и VITE_SUPABASE_ANON_KEY в Environment' }
       if (!validEmail(email)) return { error: 'Проверьте формат email' }
@@ -86,8 +116,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { error } = await supabase.auth.verifyOtp({ email: email.trim(), token: token.trim(), type: 'email' })
       return error ? { error: translateAuthError(error.message) } : { error: null }
     },
+    signInWithGoogle: async () => {
+      if (!isSupabaseConfigured) return { error: 'Supabase не настроен' }
+      const { error } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: appRedirectUrl(), queryParams: { access_type: 'offline', prompt: 'select_account' } } })
+      return { error: error ? translateAuthError(error.message) : null }
+    },
+    signInAnonymously: async () => {
+      if (!isSupabaseConfigured) return { error: 'Supabase не настроен' }
+      const { error } = await supabase.auth.signInAnonymously()
+      return { error: error ? translateAuthError(error.message) : null }
+    },
     updateProfile: async (updates) => {
-      if (!user) return 'Сначала войдите в аккаунт'
+      if (!user || user.isAnonymous) return 'Постоянный аккаунт нужен для сохранения профиля'
       const { error } = await supabase.from('profiles').update(updates).eq('id', user.id)
       if (error) return translateAuthError(error.message)
       setUser({ ...user, ...updates })
@@ -104,7 +144,8 @@ function translateAuthError(message: string) {
   if (normalized.includes('invalid') && normalized.includes('token')) return 'Код истёк или введён неверно. Запросите новый код'
   if (normalized.includes('expired')) return 'Срок действия кода истёк. Запросите новый код'
   if (normalized.includes('email not confirmed')) return 'Подтвердите email кодом из письма'
-  if (normalized.includes('email rate limit') || normalized.includes('rate limit') || normalized.includes('too many') || normalized.includes('over_email')) return 'Слишком много попыток. Попробуйте позже'
+  if (normalized.includes('email rate limit') || normalized.includes('rate limit') || normalized.includes('too many') || normalized.includes('over_email')) return 'Сейчас временно недоступна отправка писем. Попробуйте войти через Google.'
+  if (normalized.includes('anonymous')) return 'Временная сессия сейчас недоступна. Продолжите как гость или войдите через Google.'
   if (normalized.includes('user not found')) return 'Пользователь не найден. Выберите регистрацию'
   if (normalized.includes('signups not allowed')) return 'Регистрация отключена в настройках Supabase'
   return message
