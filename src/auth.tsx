@@ -62,8 +62,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     signInWithOAuth: async (provider) => {
       if (!isSupabaseConfigured) return { error: 'Добавьте Supabase environment variables' }
       const redirectTo = `${window.location.origin}${window.location.pathname}`
-      const { error } = await supabase.auth.signInWithOAuth({ provider, options: { redirectTo } })
-      return error ? { error: translateAuthError(error.message) } : { error: null }
+      const { data, error } = await supabase.auth.signInWithOAuth({ provider, options: { redirectTo, skipBrowserRedirect: true } })
+      if (error) return { error: translateAuthError(error.message) }
+      if (!data?.url) return { error: `${provider === 'google' ? 'Google' : 'Apple'} пока не подключён в Supabase. Выберите вход по email.` }
+      window.location.assign(data.url)
+      return { error: null }
     },
     verifyOtp: async (email, token) => {
       if (!isSupabaseConfigured) return { error: 'Supabase не настроен' }
@@ -92,6 +95,7 @@ function translateAuthError(message: string) {
   if (normalized.includes('email not confirmed')) return 'Подтвердите email кодом из письма'
   if (normalized.includes('email rate limit') || normalized.includes('rate limit')) return 'Слишком много попыток. Попробуйте позже'
   if (normalized.includes('user not found')) return 'Пользователь не найден. Выберите регистрацию'
+  if (normalized.includes('unsupported provider') || normalized.includes('provider is not enabled')) return `${message.includes('google') ? 'Google' : 'Этот OAuth-провайдер'} пока не включён в Supabase. Выберите вход по email.`
   if (normalized.includes('signups not allowed')) return 'Регистрация отключена в настройках Supabase'
   return message
 }
