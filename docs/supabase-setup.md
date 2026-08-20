@@ -1,14 +1,18 @@
 # Настройка Supabase для PULSE
 
-## Шаг 1. Применить SQL-схему
+## Точная 2-шаговая инструкция для SQL Editor
 
-В панели Supabase откройте **SQL Editor → New query**, вставьте весь файл [`supabase/schema.sql`](../supabase/schema.sql) и нажмите **Run**. Скрипт создаёт `profiles` и `events`, включает RLS, добавляет триггер профиля, RPC `create_event()` с лимитом 5 событий за 10 минут, PostGIS-координаты и подключение `events` к `supabase_realtime`.
+**Шаг 1.** В панели Supabase откройте нужный проект, перейдите в **SQL Editor → New query**, вставьте содержимое файла [`supabase/schema.sql`](../supabase/schema.sql) целиком и нажмите **Run**. Скрипт идемпотентен для повторного запуска: он создаёт или обновляет таблицы `profiles` и `events`, индексы PostGIS, RLS-политики, триггер профиля, RPC `create_event()` с ограничением 5 событий за 10 минут и добавляет `events` в публикацию `supabase_realtime`.
 
-## Шаг 2. Включить Email OTP и задать URL
+**Шаг 2.** После успешного выполнения откройте **Table Editor** и убедитесь, что существуют `profiles` и `events`, а в **Database → Publications → supabase_realtime** присутствует таблица `events`. Если SQL Editor показывает ошибку, исправьте её до сообщения об успешном выполнении и только затем переходите к настройке авторизации.
 
-Откройте **Authentication → Providers → Email**, включите Email provider и сохраните настройки. В **Authentication → URL Configuration** укажите Site URL и Redirect URLs для preview/production-доменов приложения. На стороне фронтенда задайте `VITE_SUPABASE_URL` из **Project Settings → API → Project URL** и `VITE_SUPABASE_ANON_KEY` из **Project Settings → API → Publishable/anon key**. Service-role key нельзя помещать в браузер или в переменные `VITE_`.
+## Настройка Email OTP
 
-PULSE использует `signInWithOtp`: пользователь вводит email, получает одноразовую ссылку, а Supabase восстанавливает сессию после перехода по ссылке. При первом входе имя передаётся в metadata и сохраняется триггером `handle_new_user`. Публикация событий идёт через `create_event()`, а новые события синхронизируются через Supabase Realtime.
+В **Authentication → Providers → Email** включите Email provider и разрешите регистрацию пользователей, если PULSE должен принимать новые аккаунты. В **Authentication → URL Configuration** укажите Site URL и Redirect URLs для preview- и production-доменов приложения. В шаблоне письма Supabase должен отображаться `{{ .Token }}`, поскольку PULSE использует одноразовый **6-значный код**, а не переход по Magic Link.
+
+На стороне фронтенда используются `VITE_SUPABASE_URL` из **Project Settings → API → Project URL** и `VITE_SUPABASE_ANON_KEY` из **Project Settings → API → Publishable/anon key**. Service-role key нельзя помещать в браузер или в переменные `VITE_`.
+
+PULSE вызывает `signInWithOtp()` для отправки кода и `verifyOtp({ email, token, type: 'email' })` для подтверждения. После первого входа имя передаётся в metadata, а триггер `handle_new_user` создаёт профиль. Добавление событий выполняется через `create_event()`, а изменения `events` приходят через Supabase Realtime.
 
 ### О предупреждении `public.spatial_ref_sys`
 

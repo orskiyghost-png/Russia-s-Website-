@@ -222,3 +222,27 @@ html[data-theme='light'] .auth-provider-note strong { color:#182532; }
 @keyframes otp-shake { 10%,90% { transform:translateX(-2px); } 20%,80% { transform:translateX(4px); } 30%,50%,70% { transform:translateX(-6px); } 40%,60% { transform:translateX(6px); } }
 .form-notice { line-height:1.45; }
 @media (prefers-reduced-motion: reduce) { .otp-grid-error { animation:none; } }
+
+/* PULSE UX hardening: iOS-safe forms, readable tiles, and restrained overlays */
+input, textarea, select { font-size: 16px !important; }
+.auth-modal { width: 100%; max-width: 28rem; margin-inline: auto; padding-inline: 1rem; }
+@media (min-width: 640px) { .auth-modal { padding-inline: 1.5rem; } }
+.real-map .leaflet-tile-pane { filter: none; }
+html[data-theme='dark'] .real-map .leaflet-tile-pane { filter: none; }
+.map-vignette { background: linear-gradient(180deg, rgba(7,9,13,.24) 0%, rgba(7,9,13,0) 27%, rgba(7,9,13,0) 68%, rgba(7,9,13,.46) 100%); }
+.map-title-wash { background: transparent !important; backdrop-filter: blur(12px) saturate(110%); -webkit-backdrop-filter: blur(12px) saturate(110%); mask-image: linear-gradient(to bottom, black 0%, rgba(0,0,0,.72) 36%, transparent 100%); -webkit-mask-image: linear-gradient(to bottom, black 0%, rgba(0,0,0,.72) 36%, transparent 100%); }
+.layer-rail { padding: 14px; }
+.layer-rail > .layer-button { margin-bottom: .5rem; padding: .75rem; border: 1px solid var(--line-soft); border-radius: 1rem; background: var(--surface-control, rgba(255,255,255,.05)); }
+.layer-rail > .layer-button:last-of-type { margin-bottom: 0; }
+.layer-rail > .layer-button:hover { transform: translateY(-1px); }
+.layer-rail > .layer-button:active, .add-event-button:active, .primary-action:active, .category-option:active { transform: scale(.97); }
+.glass-panel { backdrop-filter: blur(20px) saturate(150%); -webkit-backdrop-filter: blur(20px) saturate(150%); }
+.pulse-header, .layer-rail, .bottom-actions { padding-bottom: max(10px, env(safe-area-inset-bottom)); }
+.bottom-actions { bottom: max(16px, env(safe-area-inset-bottom)); }
+@media (max-width: 700px) {
+  .pulse-header { top: max(10px, env(safe-area-inset-top)); left: 10px; right: 10px; }
+  .layer-rail { left: 10px; width: calc(100vw - 20px); }
+  .map-title-block { left: 16px; top: 96px; }
+  .bottom-actions { left: 10px; right: 10px; }
+}
+@media (prefers-reduced-motion: reduce) { .layer-rail > .layer-button:active, .add-event-button:active, .primary-action:active, .category-option:active { transform: none; } }
