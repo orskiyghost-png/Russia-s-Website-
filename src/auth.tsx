@@ -104,7 +104,7 @@ function translateAuthError(message: string) {
   if (normalized.includes('invalid') && normalized.includes('token')) return 'Код истёк или введён неверно. Запросите новый код'
   if (normalized.includes('expired')) return 'Срок действия кода истёк. Запросите новый код'
   if (normalized.includes('email not confirmed')) return 'Подтвердите email кодом из письма'
-  if (normalized.includes('email rate limit') || normalized.includes('rate limit')) return 'Слишком много попыток. Попробуйте позже'
+  if (normalized.includes('email rate limit') || normalized.includes('rate limit') || normalized.includes('too many') || normalized.includes('over_email')) return 'Слишком много попыток. Попробуйте позже'
   if (normalized.includes('user not found')) return 'Пользователь не найден. Выберите регистрацию'
   if (normalized.includes('signups not allowed')) return 'Регистрация отключена в настройках Supabase'
   return message

@@ -36,6 +36,20 @@ import { DEFAULT_CENTER, createEvent as createServerEvent, fetchEvents, kindConf
 import type { EventKind, Layer, RadarEvent } from './types'
 
 const spring = { type: 'spring' as const, stiffness: 320, damping: 30 }
+const OTP_EMAIL_QUOTA_KEY = 'pulse-otp-email-quota-until'
+const OTP_EMAIL_QUOTA_MS = 60 * 60 * 1000
+
+function otpQuotaLocked() {
+  try { return Number(window.localStorage.getItem(OTP_EMAIL_QUOTA_KEY) ?? 0) > Date.now() } catch { return false }
+}
+
+function lockOtpQuota() {
+  try { window.localStorage.setItem(OTP_EMAIL_QUOTA_KEY, String(Date.now() + OTP_EMAIL_QUOTA_MS)) } catch { /* storage may be disabled */ }
+}
+
+function isOtpQuotaError(message: string) {
+  return /слишком много попыток|rate limit|too many|email rate limit|over_email/i.test(message)
+}
 
 type Toast = { message: string; tone?: 'error' | 'success' }
 
@@ -236,21 +250,24 @@ function AuthModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () 
   }, [resendCooldown])
   const submitEmail = async () => {
     if (submitting || resendCooldown > 0) return
+    if (otpQuotaLocked()) { setError('Лимит отправки писем уже исчерпан. Подождите около часа и попробуйте снова.'); return }
     const normalizedEmail = email.trim()
     setEmail(normalizedEmail)
     setError(''); setNotice(''); setSubmitting(true)
     const result = mode === 'login' ? await login(normalizedEmail) : await register(name, normalizedEmail)
     if (result.error) {
       setError(result.error)
+      if (isOtpQuotaError(result.error)) lockOtpQuota()
       if (result.error.includes('Письмо не отправлено')) setNotice('Если письмо не приходит, владельцу проекта необходимо включить встроенный SMTP в настройках Supabase')
     } else { setStep('otp'); setResendCooldown(60); setNotice(`Код отправлен на ${normalizedEmail}`); window.setTimeout(() => inputs.current[0]?.focus(), 50) }
     setSubmitting(false)
   }
   const resendOtp = async () => {
     if (submitting || resendCooldown > 0) return
+    if (otpQuotaLocked()) { setError('Лимит отправки писем уже исчерпан. Подождите около часа и попробуйте снова.'); return }
     setError(''); setNotice(''); setSubmitting(true)
     const result = mode === 'login' ? await login(email) : await register(name, email)
-    if (result.error) setError(result.error)
+    if (result.error) { setError(result.error); if (isOtpQuotaError(result.error)) lockOtpQuota() }
     else { setDigits(['', '', '', '', '', '']); setResendCooldown(60); setNotice(`Новый код отправлен на ${email.trim()}`); window.setTimeout(() => inputs.current[0]?.focus(), 50) }
     setSubmitting(false)
   }
