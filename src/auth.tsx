@@ -11,7 +11,6 @@ type AuthContextValue = {
   configured: boolean
   login: (email: string) => Promise<AuthResult>
   register: (name: string, email: string) => Promise<AuthResult>
-  signInWithOAuth: (provider: 'google' | 'apple') => Promise<AuthResult>
   verifyOtp: (email: string, token: string) => Promise<VerifyResult>
   updateProfile: (updates: Partial<Pick<AuthUser, 'name' | 'city' | 'notifications'>>) => Promise<string | null>
   logout: () => Promise<void>
@@ -59,15 +58,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { error } = await supabase.auth.signInWithOtp({ email: email.trim(), options: { shouldCreateUser: true, data: { name: name.trim() } } })
       return error ? { error: translateAuthError(error.message) } : { error: null, needsVerification: true }
     },
-    signInWithOAuth: async (provider) => {
-      if (!isSupabaseConfigured) return { error: 'Добавьте Supabase environment variables' }
-      const redirectTo = `${window.location.origin}${window.location.pathname}`
-      const { data, error } = await supabase.auth.signInWithOAuth({ provider, options: { redirectTo, skipBrowserRedirect: true } })
-      if (error) return { error: translateAuthError(error.message) }
-      if (!data?.url) return { error: `${provider === 'google' ? 'Google' : 'Apple'} пока не подключён в Supabase. Выберите вход по email.` }
-      window.location.assign(data.url)
-      return { error: null }
-    },
     verifyOtp: async (email, token) => {
       if (!isSupabaseConfigured) return { error: 'Supabase не настроен' }
       if (!validEmail(email)) return { error: 'Проверьте email' }
@@ -89,13 +79,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 function translateAuthError(message: string) {
   const normalized = message.toLowerCase()
-  if (normalized.includes('error sending magic link email') || normalized.includes('error sending email')) return 'Не удалось отправить письмо. Проверьте SMTP в Supabase и попробуйте ещё раз через минуту.'
+  if (normalized.includes('error sending magic link email') || normalized.includes('error sending email') || normalized.includes('smtp')) return 'Письмо не отправлено: в Supabase нужно включить встроенный SMTP или подтвердить домен Resend.'
   if (normalized.includes('invalid') && normalized.includes('token')) return 'Код истёк или введён неверно'
   if (normalized.includes('expired')) return 'Срок действия кода истёк. Запросите новый код'
   if (normalized.includes('email not confirmed')) return 'Подтвердите email кодом из письма'
   if (normalized.includes('email rate limit') || normalized.includes('rate limit')) return 'Слишком много попыток. Попробуйте позже'
   if (normalized.includes('user not found')) return 'Пользователь не найден. Выберите регистрацию'
-  if (normalized.includes('unsupported provider') || normalized.includes('provider is not enabled')) return `${message.includes('google') ? 'Google' : 'Этот OAuth-провайдер'} пока не включён в Supabase. Выберите вход по email.`
   if (normalized.includes('signups not allowed')) return 'Регистрация отключена в настройках Supabase'
   return message
 }

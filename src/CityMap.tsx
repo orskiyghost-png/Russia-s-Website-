@@ -4,13 +4,11 @@ import L, { type LatLngExpression } from 'leaflet'
 import { Crosshair, MapPin } from 'lucide-react'
 import type { EventKind, RadarEvent } from './types'
 import { kindConfig } from './data'
-import type { Theme } from './theme'
 
 type CityMapProps = {
   center: [number, number]
   events: RadarEvent[]
   selectedId?: string
-  theme: Theme
   onSelect: (event: RadarEvent) => void
   onMapClick: (coords: { lat: number; lng: number }) => void
 }
@@ -63,7 +61,7 @@ const EventMarker = memo(function EventMarker({ event, selectedId, onSelect }: {
   return <Marker position={[event.lat, event.lng]} icon={icon} eventHandlers={handlers}><Popup closeButton={false} className="pulse-popup"><strong>{event.title}</strong><span>{event.userName} · {event.location}</span></Popup></Marker>
 })
 
-export function CityMap({ center, events, selectedId, theme, onSelect, onMapClick }: CityMapProps) {
+export function CityMap({ center, events, selectedId, onSelect, onMapClick }: CityMapProps) {
   const tileUrl = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
   const attribution = '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors'
   return <MapContainer center={center as LatLngExpression} zoom={12} minZoom={3} maxZoom={19} zoomControl={false} scrollWheelZoom preferCanvas className="real-map"><TileLayer attribution={attribution} url={tileUrl} updateWhenIdle updateWhenZooming={false} keepBuffer={2} /><ZoomControl position="bottomright" /><MapViewport center={center} /><MapClickCapture onMapClick={onMapClick} />{events.map((event) => <EventMarker key={event.id} event={event} selectedId={selectedId} onSelect={onSelect} />)}</MapContainer>
