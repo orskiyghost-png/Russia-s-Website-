@@ -232,7 +232,7 @@ function EventSheet({ event, onClose, onReact }: { event: RadarEvent; onClose: (
 }
 
 function AuthModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
-  const { login, register, verifyOtp, signInWithGoogle, signInAnonymously } = useAuth()
+  const { login, register, verifyOtp, signInWithGoogle } = useAuth()
   const [mode, setMode] = useState<'login' | 'register'>('login')
   const [choice, setChoice] = useState<'choice' | 'email' | 'otp'>('choice')
   const [name, setName] = useState('')
@@ -255,14 +255,6 @@ function AuthModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () 
     setError(''); setSubmitting(true)
     const result = await signInWithGoogle()
     if (result.error) { setError(result.error); setSubmitting(false) }
-  }
-
-  const continueAnonymous = async () => {
-    setError(''); setSubmitting(true)
-    const result = await signInAnonymously()
-    if (result.error) setError(result.error)
-    else { onSuccess(); return }
-    setSubmitting(false)
   }
 
   const submitEmail = async () => {
@@ -320,12 +312,11 @@ function AuthModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () 
       <div className="auth-choice-divider"><span>или</span></div>
       <button className="auth-choice" onClick={() => { setChoice('email'); setError('') }}><span className="auth-choice-icon"><MailIcon /></span><span><strong>Войти по e-mail</strong><small>Одноразовый 6-значный код</small></span><ArrowRight size={16} /></button>
       <button className="auth-choice auth-choice-quiet" disabled={submitting} onClick={() => { setError(''); onClose() }}><span className="auth-choice-icon"><MapIcon size={16} /></span><span><strong>Продолжить без аккаунта</strong><small>Просмотр карты, поиск и события доступны гостям</small></span></button>
-      <button className="auth-choice auth-choice-quiet" disabled={submitting} onClick={() => { void continueAnonymous() }}><span className="auth-choice-icon"><UserRound size={16} /></span><span><strong>Временная сессия на этом устройстве</strong><small>Anonymous session без обещания восстановления</small></span></button>
     </div>}
     {choice === 'email' && <><button className="auth-back-link" onClick={() => setChoice('choice')}>← Все способы входа</button><div className="auth-provider-note"><span>Без пароля</span><strong>{mode === 'login' ? 'Вход по email с одноразовым кодом' : 'Регистрация по email с одноразовым кодом'}</strong></div><div className="auth-tabs"><button className={mode === 'login' ? 'active' : ''} onClick={() => { setMode('login'); setError('') }}>Войти</button><button className={mode === 'register' ? 'active' : ''} onClick={() => { setMode('register'); setError('') }}>Регистрация</button></div>{mode === 'register' && <label className="input-label">Имя<input className="text-[16px]" value={name} onChange={(event) => setName(event.target.value)} placeholder="Как к вам обращаться?" autoComplete="name" /></label>}<label className="input-label">Email<input className="text-[16px]" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" type="email" autoComplete="email" /></label><button className="primary-action" disabled={submitting} onClick={() => { void submitEmail() }}>{submitting ? 'Отправляем…' : 'Получить 6-значный код'}<ArrowRight size={16} /></button></>}
     {choice === 'otp' && <><button className="auth-back-link" onClick={() => setChoice('email')}>← Изменить email</button><div className={`otp-grid ${otpErrorPulse ? 'otp-grid-error' : ''}`} role="group" aria-label="6-значный код">{digits.map((digit, index) => <input key={index} ref={(element) => { inputs.current[index] = element }} className="otp-cell text-[16px]" inputMode="numeric" pattern="[0-9]*" autoComplete={index === 0 ? 'one-time-code' : 'off'} maxLength={index === 0 ? 6 : 1} value={digit} onChange={(event) => updateDigit(index, event.target.value)} onPaste={(event) => { event.preventDefault(); updateDigit(index, event.clipboardData.getData('text')) }} onKeyDown={(event) => { if (event.key === 'Backspace' && !digits[index] && index > 0) inputs.current[index - 1]?.focus() }} aria-label={`Цифра ${index + 1}`} />)}</div><button className="primary-action" disabled={submitting || digits.some((digit) => !digit)} onClick={() => { void submitCode() }}>{submitting ? 'Проверяем…' : 'Подтвердить код'}<Check size={16} /></button><div className="otp-actions"><button className="otp-resend" disabled={submitting || resendCooldown > 0} onClick={() => { void resendOtp() }}>{resendCooldown > 0 ? `Повторная отправка через ${resendCooldown} с` : 'Отправить код повторно'}</button><button className="otp-change" disabled={submitting} onClick={() => setChoice('choice')}>Другой способ</button></div></>}
     {error && <p className="form-error">{error}</p>}{notice && <p className="form-notice">{notice}</p>}
-    <p className="auth-disclaimer">Гости могут смотреть карту и искать события. Anonymous session временная; для постоянного аккаунта используйте Google или Email OTP.</p>
+    <p className="auth-disclaimer">Гости могут смотреть карту и искать события. Для постоянного аккаунта используйте Google или Email OTP.</p>
   </div></ModalFrame>
 }
 

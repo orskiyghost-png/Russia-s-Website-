@@ -118,8 +118,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
     signInWithGoogle: async () => {
       if (!isSupabaseConfigured) return { error: 'Supabase не настроен' }
-      const { error } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: appRedirectUrl(), queryParams: { access_type: 'offline', prompt: 'select_account' } } })
-      return { error: error ? translateAuthError(error.message) : null }
+      const options = { redirectTo: appRedirectUrl(), queryParams: { access_type: 'offline', prompt: 'select_account' } }
+      const result = user?.isAnonymous
+        ? await supabase.auth.linkIdentity({ provider: 'google', options })
+        : await supabase.auth.signInWithOAuth({ provider: 'google', options })
+      return { error: result.error ? translateAuthError(result.error.message) : null }
     },
     signInAnonymously: async () => {
       if (!isSupabaseConfigured) return { error: 'Supabase не настроен' }

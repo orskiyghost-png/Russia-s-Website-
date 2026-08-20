@@ -34,3 +34,12 @@ Email OTP остаётся резервным способом входа: email
 Anonymous users используют PostgreSQL role `authenticated`, поэтому одной проверки роли недостаточно. Функция `public.create_event()` дополнительно проверяет `auth.jwt() ->> 'is_anonymous'` и отклоняет anonymous session с ошибкой `PERMANENT_ACCOUNT_REQUIRED`. Публичное чтение `events` сохраняется. Постоянный сигнал может создать только permanent account с профилем.
 
 После включения anonymous sign-ins в панели Supabase примените миграцию `supabase/migrations/20260820_anonymous_access.sql` в SQL Editor. Она идемпотентно обновляет только RPC `create_event()` и не заменяет таблицы, RLS или Realtime.
+
+
+## UX и linking после auth-аудита
+
+Anonymous session не рекламируется отдельным основным способом входа. Пользователь видит только Google, Email OTP и продолжение без аккаунта. Anonymous может быть создан технически через `signInAnonymously()` в сценариях, которым нужен authenticated JWT, но пользователь не должен выбирать между Guest и Anonymous.
+
+Если уже существующая anonymous session выбирает Google, AuthContext использует `supabase.auth.linkIdentity({ provider: 'google' })`, чтобы сохранить тот же user ID и не создавать второй независимый аккаунт. Для обычного Guest без session используется `signInWithOAuth()`.
+
+Полный аудит текущей схемы показал, что в базе есть только `profiles`, `events` и RPC `create_event()`: policies для `profiles` ограничены owner, `events` публично доступны только на чтение, прямой insert policy отсутствует, а persistent create проходит только через security-definer RPC. Anonymous claim дополнительно проверяется в RPC; новых notification/admin policies в текущем проекте нет.
