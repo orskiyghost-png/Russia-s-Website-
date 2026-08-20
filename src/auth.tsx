@@ -63,8 +63,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!isSupabaseConfigured) return { error: 'Добавьте Supabase environment variables' }
       if (!validEmail(email)) return { error: 'Проверьте формат email' }
       if (password.length < 6) return { error: 'Пароль должен содержать минимум 6 символов' }
-      if (!captchaToken) return { error: 'Пройдите CAPTCHA перед входом' }
-      const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password, options: { captchaToken } })
+      // Капча не блокирует отправку: если виджет не выдал токен, сервер сам решает
+      // (Supabase отклоняет запрос только когда включён Bot and Abuse Protection).
+      const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password, options: captchaToken ? { captchaToken } : undefined })
       return error ? { error: translateAuthError(error.message) } : { error: null }
     },
     register: async (name, email, password, captchaToken) => {
@@ -72,8 +73,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (name.trim().length < 2) return { error: 'Введите имя от 2 символов' }
       if (!validEmail(email)) return { error: 'Проверьте формат email' }
       if (password.length < 6) return { error: 'Пароль должен содержать минимум 6 символов' }
-      if (!captchaToken) return { error: 'Пройдите CAPTCHA перед регистрацией' }
-      const { data, error } = await supabase.auth.signUp({ email: email.trim(), password, options: { captchaToken, data: { name: name.trim() } } })
+      const { data, error } = await supabase.auth.signUp({ email: email.trim(), password, options: { ...(captchaToken ? { captchaToken } : {}), data: { name: name.trim() } } })
       if (error) return { error: translateAuthError(error.message) }
       if (!data.session) return { error: 'Аккаунт создан, но Supabase всё ещё требует подтверждение email. Отключите Confirm email в Auth Settings.' }
       return { error: null }

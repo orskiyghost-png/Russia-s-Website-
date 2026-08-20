@@ -81,9 +81,7 @@ function escapeAttribute(value: string) {
 function markerIcon(event: RadarEvent, selected: boolean) {
   const { color } = kindConfig[event.kind]
   const safeAvatar = event.avatarUrl ? escapeAttribute(event.avatarUrl) : ''
-  const avatar = safeAvatar
-    ? `<img class="pulse-marker-avatar" src="${safeAvatar}" alt="" loading="lazy" />`
-    : `<span class="pulse-marker-fallback">${escapeAttribute(initials(event.userName))}</span>`
+  const avatar = `<span class="pulse-marker-fallback">${escapeAttribute(initials(event.userName))}</span>${safeAvatar ? `<img class="pulse-marker-avatar" src="${safeAvatar}" alt="" loading="lazy" onerror="this.remove()" />` : ''}`
   const size = selected ? 44 : 34
   return L.divIcon({
     className: 'pulse-leaflet-marker-wrapper',
