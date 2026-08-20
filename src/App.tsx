@@ -32,7 +32,7 @@ import {
   X,
   Zap,
 } from 'lucide-react'
-import { CityMap, LocateMeButton, MapClickHint } from './CityMap'
+import { CityMap, LocateMeButton } from './CityMap'
 import { useAuth } from './auth'
 import { useTheme } from './theme'
 import { DEFAULT_CENTER, createEvent as createServerEvent, fetchEvents, kindConfig, layerConfig, relativeTime, subscribeToEvents } from './data'
@@ -179,13 +179,13 @@ function App() {
     </aside>
 
     <main className="map-stage">
-      <CityMap center={center} events={filteredEvents} selectedId={selectedEvent?.id} onSelect={setSelectedEvent} onMapClick={openReportAt} />
+      <CityMap center={center} events={filteredEvents} selectedId={selectedEvent?.id} theme={theme} onSelect={setSelectedEvent} onMapClick={openReportAt} />
       {(eventsLoading || searching || authLoading) && <MapSkeleton label={searching ? 'Ищем город…' : 'Синхронизируем радар…'} />}
       <div className="map-vignette" />
       <div className="map-title-wash" aria-hidden="true" />
       <div className="map-title-block"><p>ОРСК · ОБНОВЛЕНО ТОЛЬКО ЧТО</p><h1>Город в реальном <em>времени</em></h1><span><Users size={13} /> {events.length} сигналов в радиусе 2 км</span></div>
       <div className="map-controls glass-panel"><LocateMeButton onLocated={(location) => { setCenter(location); notify('Карта центрирована на вас') }} onError={(message) => notify(message, 'error')} /><button className="map-floating-control" onClick={() => setCenter(DEFAULT_CENTER)} title="Вернуться к Орску" aria-label="Вернуться к Орску"><Navigation size={16} /></button></div>
-      <MapClickHint onClick={() => openReportAt()} /><button className="ai-fab glass-panel" onClick={() => setIsAiOpen((value) => !value)} aria-label="Открыть PULSE AI"><Bot size={18} /><span>PULSE AI</span></button>
+      <button className="ai-fab glass-panel" onClick={() => setIsAiOpen((value) => !value)} aria-label="Открыть PULSE AI"><Bot size={18} /><span>PULSE AI</span></button>
 
       <AnimatePresence>{selectedEvent && <EventSheet event={selectedEvent} onClose={() => setSelectedEvent(null)} onReact={() => notify('Реакция сохранена')} />}</AnimatePresence>
       <motion.div className="event-strip" initial={{ y: 18, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={spring}>
@@ -193,7 +193,7 @@ function App() {
         <div className="strip-list">{filteredEvents.slice(0, 4).map((event) => <MiniEvent key={event.id} event={event} selected={event.id === selectedEvent?.id} onClick={() => setSelectedEvent(event)} />)}</div>
       </motion.div>
     </main>    {!configured && <div className="backend-banner glass-panel"><Zap size={14} /><span>Локальный режим: подключите Supabase, чтобы включить общие события и Email OTP</span><button onClick={() => setIsAuthOpen(true)}>Настроить <ArrowRight size={13} /></button></div>}
-    <div className="bottom-actions glass-panel"><button onClick={() => openReportAt()} className="add-event-button"><Plus size={17} /> Создать сигнал <kbd>⌘ N</kbd></button><span className="map-attribution">Карта © OpenStreetMap contributors</span><span className="desktop-only-hint"><Crosshair size={13} /> Нажмите на карту, чтобы поставить метку в Орске</span></div>
+    <div className="bottom-actions glass-panel"><button onClick={() => openReportAt()} className="add-event-button"><Plus size={17} /> Создать сигнал <kbd>⌘ N</kbd></button><span className="desktop-only-hint"><Crosshair size={13} /> Нажмите на карту, чтобы поставить метку в Орске</span></div>
 
     <AnimatePresence>{isAuthOpen && <AuthModal onClose={() => setIsAuthOpen(false)} onSuccess={() => { setIsAuthOpen(false); notify('Добро пожаловать в PULSE') }} />}</AnimatePresence>
     <AnimatePresence>{isReportOpen && pendingCoords && <ReportModal coords={pendingCoords} onClose={() => { setIsReportOpen(false); setPendingCoords(null) }} onSubmit={createEvent} />}</AnimatePresence>
@@ -227,6 +227,7 @@ function AuthModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () 
   const [notice, setNotice] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [resendCooldown, setResendCooldown] = useState(0)
+  const [otpErrorPulse, setOtpErrorPulse] = useState(false)
   const inputs = useRef<Array<HTMLInputElement | null>>([])
   useEffect(() => {
     if (resendCooldown <= 0) return
@@ -239,8 +240,10 @@ function AuthModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () 
     setEmail(normalizedEmail)
     setError(''); setNotice(''); setSubmitting(true)
     const result = mode === 'login' ? await login(normalizedEmail) : await register(name, normalizedEmail)
-    if (result.error) setError(result.error)
-    else { setStep('otp'); setResendCooldown(60); setNotice(`Код отправлен на ${normalizedEmail}`); window.setTimeout(() => inputs.current[0]?.focus(), 50) }
+    if (result.error) {
+      setError(result.error)
+      if (result.error.includes('Письмо не отправлено')) setNotice('Если письмо не приходит, владельцу проекта необходимо включить встроенный SMTP в настройках Supabase')
+    } else { setStep('otp'); setResendCooldown(60); setNotice(`Код отправлен на ${normalizedEmail}`); window.setTimeout(() => inputs.current[0]?.focus(), 50) }
     setSubmitting(false)
   }
   const updateDigit = (index: number, value: string) => {
@@ -252,10 +255,10 @@ function AuthModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () 
   const submitCode = async (code = digits.join('')) => {
     setError(''); setSubmitting(true)
     const result = await verifyOtp(email, code)
-    if (result.error) { setError(result.error); setDigits(['', '', '', '', '', '']); inputs.current[0]?.focus() } else onSuccess()
+    if (result.error) { setError(result.error); setNotice('Если код не принимается, запросите новый код и проверьте, что он введён без пробелов.'); setDigits(['', '', '', '', '', '']); setOtpErrorPulse(true); window.setTimeout(() => setOtpErrorPulse(false), 420); inputs.current[0]?.focus() } else onSuccess()
     setSubmitting(false)
   }
-  return <ModalFrame onClose={onClose}><div className="auth-modal"><div className="modal-orbit"><Sparkles size={19} /></div><p className="modal-overline">PULSE ACCOUNT / {step === 'otp' ? 'VERIFY' : 'ACCESS'}</p><h2>{step === 'otp' ? 'Введите код' : mode === 'login' ? 'С возвращением' : 'Присоединиться к городу'}<span>.</span></h2><p className="modal-subtitle">{step === 'otp' ? `Шесть цифр из письма для ${email.trim()}.` : mode === 'login' ? 'Войдите, чтобы сохранять места и добавлять сигналы.' : 'Создайте аккаунт и начните видеть свой город иначе.'}</p>{step === 'email' ? <><div className="auth-provider-note"><span>Без пароля</span><strong>Вход по email с одноразовым кодом</strong></div><div className="auth-divider"><span>Доступ через email</span></div><div className="auth-tabs"><button className={mode === 'login' ? 'active' : ''} onClick={() => { setMode('login'); setError('') }}>Войти</button><button className={mode === 'register' ? 'active' : ''} onClick={() => { setMode('register'); setError('') }}>Регистрация</button></div>{mode === 'register' && <label className="input-label">Имя<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Как к вам обращаться?" autoComplete="name" /></label>}<label className="input-label">Email<input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" type="email" autoComplete="email" /></label><button className="primary-action" disabled={submitting} onClick={() => { void submitEmail() }}>{submitting ? 'Отправляем…' : 'Получить 6-значный код'}<ArrowRight size={16} /></button></> : <><div className="otp-grid" role="group" aria-label="6-значный код">{digits.map((digit, index) => <input key={index} ref={(element) => { inputs.current[index] = element }} className="otp-cell" inputMode="numeric" maxLength={1} value={digit} onChange={(event) => updateDigit(index, event.target.value)} onKeyDown={(event) => { if (event.key === 'Backspace' && !digits[index] && index > 0) inputs.current[index - 1]?.focus() }} aria-label={`Цифра ${index + 1}`} />)}</div><button className="primary-action" disabled={submitting || digits.some((digit) => !digit)} onClick={() => { void submitCode() }}>{submitting ? 'Проверяем…' : 'Подтвердить код'}<Check size={16} /></button><button className="otp-resend" disabled={submitting || resendCooldown > 0} onClick={() => { setStep('email'); setDigits(['', '', '', '', '', '']); setNotice('') }}>{resendCooldown > 0 ? `Повторная отправка через ${resendCooldown} с` : 'Изменить email или отправить заново'}</button></>}{error && <p className="form-error">{error}</p>}{notice && <p className="form-notice">{notice}</p>}<p className="auth-disclaimer">PULSE использует одноразовый 6-значный код. Пароль и переходы по ссылкам не нужны.</p></div></ModalFrame>
+  return <ModalFrame onClose={onClose}><div className="auth-modal"><div className="modal-orbit"><Sparkles size={19} /></div><p className="modal-overline">PULSE ACCOUNT / {step === 'otp' ? 'VERIFY' : 'ACCESS'}</p><h2>{step === 'otp' ? 'Введите код' : mode === 'login' ? 'С возвращением' : 'Присоединиться к городу'}<span>.</span></h2><p className="modal-subtitle">{step === 'otp' ? `Шесть цифр из письма для ${email.trim()}.` : mode === 'login' ? 'Войдите, чтобы сохранять места и добавлять сигналы.' : 'Создайте аккаунт и начните видеть свой город иначе.'}</p>{step === 'email' ? <><div className="auth-provider-note"><span>Без пароля</span><strong>Вход по email с одноразовым кодом</strong></div><div className="auth-divider"><span>Доступ через email</span></div><div className="auth-tabs"><button className={mode === 'login' ? 'active' : ''} onClick={() => { setMode('login'); setError('') }}>Войти</button><button className={mode === 'register' ? 'active' : ''} onClick={() => { setMode('register'); setError('') }}>Регистрация</button></div>{mode === 'register' && <label className="input-label">Имя<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Как к вам обращаться?" autoComplete="name" /></label>}<label className="input-label">Email<input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" type="email" autoComplete="email" /></label><button className="primary-action" disabled={submitting} onClick={() => { void submitEmail() }}>{submitting ? 'Отправляем…' : 'Получить 6-значный код'}<ArrowRight size={16} /></button></> : <><div className={`otp-grid ${otpErrorPulse ? 'otp-grid-error' : ''}`} role="group" aria-label="6-значный код">{digits.map((digit, index) => <input key={index} ref={(element) => { inputs.current[index] = element }} className="otp-cell" inputMode="numeric" maxLength={1} value={digit} onChange={(event) => updateDigit(index, event.target.value)} onKeyDown={(event) => { if (event.key === 'Backspace' && !digits[index] && index > 0) inputs.current[index - 1]?.focus() }} aria-label={`Цифра ${index + 1}`} />)}</div><button className="primary-action" disabled={submitting || digits.some((digit) => !digit)} onClick={() => { void submitCode() }}>{submitting ? 'Проверяем…' : 'Подтвердить код'}<Check size={16} /></button><button className="otp-resend" disabled={submitting || resendCooldown > 0} onClick={() => { setStep('email'); setDigits(['', '', '', '', '', '']); setNotice('') }}>{resendCooldown > 0 ? `Повторная отправка через ${resendCooldown} с` : 'Изменить email или отправить заново'}</button></>}{error && <p className="form-error">{error}</p>}{notice && <p className="form-notice">{notice}</p>}<p className="auth-disclaimer">PULSE использует одноразовый 6-значный код. Пароль и переходы по ссылкам не нужны.</p></div></ModalFrame>
 }
 
 function ReportModal({ coords, onClose, onSubmit }: { coords: { lat: number; lng: number }; onClose: () => void; onSubmit: (payload: { kind: EventKind; title: string; description: string }) => void }) {

@@ -87,10 +87,8 @@ html[data-theme='dark'] .primary-action:disabled { color: #909a91 !important; ba
 .notification-row strong, .sheet-user { color: var(--text-main); }
 
 /* Map controls */
-.map-controls .leaflet-control-zoom a, .leaflet-control-attribution { color: var(--text-main); background: var(--surface-panel) !important; border-color: var(--control-border) !important; }
+.map-controls .leaflet-control-zoom a { color: var(--text-main); background: var(--surface-panel) !important; border-color: var(--control-border) !important; }
 .map-controls .leaflet-control-zoom a:hover { color: var(--text-strong); background: var(--surface-control-hover) !important; }
-html[data-theme='light'] .leaflet-control-attribution { color: #51606b !important; }
-html[data-theme='light'] .leaflet-control-attribution a { color: #365b76 !important; }
 
 /* High-contrast light mode for every previously dark hardcoded surface */
 html[data-theme='light'] .pulse-header, html[data-theme='light'] .layer-rail, html[data-theme='light'] .glass-panel, html[data-theme='light'] .modal-card, html[data-theme='light'] .event-sheet, html[data-theme='light'] .notifications-panel, html[data-theme='light'] .ai-panel { color: var(--text-main); }
@@ -149,15 +147,11 @@ html[data-theme='dark'] .map-vignette { background: linear-gradient(180deg,rgba(
 .auth-provider-note { display:flex; flex-direction:column; gap:4px; margin:16px 0 12px; padding:12px 14px; border:1px solid var(--control-border); border-radius:12px; background:var(--surface-control); color:var(--text-muted); font-size:10px; }
 .auth-provider-note span { color:var(--text-dim); font:700 9px 'DM Mono',monospace; letter-spacing:.1em; text-transform:uppercase; }
 .auth-provider-note strong { color:var(--text-main); font-size:11px; }
-.map-click-hint { color:var(--text-main); background:var(--surface-panel); border-color:var(--control-border); box-shadow:0 12px 28px rgba(0,0,0,.14); }
-.map-click-hint:hover { color:var(--text-strong); background:var(--surface-control-hover); }
 .ai-fab { color:var(--pink); background:var(--surface-panel); border-color:var(--control-border); }
 .ai-fab:hover { color:var(--text-strong); background:var(--surface-control-hover); }
 .ai-panel { background:var(--surface-panel); color:var(--text-main); border-color:var(--control-border); }
 .ai-message p, .ai-input input { color:var(--text-muted); }
 .ai-suggestions button { color:var(--text-muted); background:var(--surface-control); border-color:var(--control-border); }
-html[data-theme='light'] .map-click-hint { color:#243341; background:rgba(255,255,255,.9); border-color:rgba(36,51,65,.16); }
-html[data-theme='light'] .map-click-hint:hover { color:#13212c; background:#fff; }
 html[data-theme='light'] .ai-fab { color:#754066; background:rgba(255,255,255,.9); border-color:rgba(36,51,65,.16); }
 html[data-theme='light'] .ai-panel { background:rgba(255,255,255,.92); color:#182532; border-color:rgba(36,51,65,.16); }
 html[data-theme='light'] .ai-message { background:rgba(24,37,50,.045); }
@@ -185,7 +179,6 @@ html[data-theme='light'] .auth-provider-note strong { color:#182532; }
   .map-title-block p { margin-bottom:7px; font-size:8px; }
   .map-title-block h1 { font-size:32px; line-height:.96; max-width:280px; }
   .map-title-block>span { margin-top:11px; font-size:9px; color:var(--text-muted); }
-  .map-click-hint { top:auto; left:14px; right:14px; bottom:172px; justify-content:center; min-height:46px; padding:0 12px; border-radius:14px; font-size:10px; }
   .map-controls { top:162px; left:auto; right:14px; }
   .map-controls .map-floating-control, .real-map .leaflet-control-zoom a { width:42px; height:42px; }
   .layer-rail { top:78px; left:10px; width:calc(100vw - 20px); max-height:calc(100dvh - 150px); overflow:auto; transform:translateY(-120%); opacity:0; pointer-events:none; transition:transform .2s ease,opacity .2s ease; }
@@ -219,7 +212,13 @@ html[data-theme='light'] .auth-provider-note strong { color:#182532; }
 }
 
 
-/* Neutral map title wash: diagonal matte glass, no flags or political branding */
-.map-title-wash { position:absolute; z-index:2; top:0; left:0; width:min(760px,72vw); height:340px; pointer-events:none; clip-path:polygon(0 0,100% 0,76% 100%,0 84%); background:linear-gradient(128deg,rgba(7,9,13,.82) 0%,rgba(7,9,13,.58) 42%,rgba(7,9,13,.16) 76%,transparent 100%); backdrop-filter:blur(10px) saturate(115%); -webkit-backdrop-filter:blur(10px) saturate(115%); mask-image:linear-gradient(180deg,#000 0%,rgba(0,0,0,.94) 74%,transparent 100%); }
-html[data-theme='light'] .map-title-wash { background:linear-gradient(128deg,rgba(255,255,255,.86) 0%,rgba(255,255,255,.7) 44%,rgba(255,255,255,.2) 78%,transparent 100%); }
-@media (max-width:700px) { .map-title-wash { width:100%; height:255px; clip-path:polygon(0 0,100% 0,86% 100%,0 88%); background:linear-gradient(128deg,rgba(7,9,13,.76),rgba(7,9,13,.42) 52%,transparent 100%); } html[data-theme='light'] .map-title-wash { background:linear-gradient(128deg,rgba(255,255,255,.84),rgba(255,255,255,.58) 52%,transparent 100%); } }
+/* Transparent matte title wash: backdrop blur only, fading radially into the map */
+.map-title-wash { position:absolute; z-index:2; top:0; left:0; width:min(760px,72vw); height:340px; pointer-events:none; background:transparent; backdrop-filter:blur(24px) saturate(115%); -webkit-backdrop-filter:blur(24px) saturate(115%); mask-image:radial-gradient(ellipse 92% 88% at 0% 0%,#000 0%,rgba(0,0,0,.92) 38%,rgba(0,0,0,.55) 63%,transparent 88%); -webkit-mask-image:radial-gradient(ellipse 92% 88% at 0% 0%,#000 0%,rgba(0,0,0,.92) 38%,rgba(0,0,0,.55) 63%,transparent 88%); }
+@media (max-width:700px) { .map-title-wash { width:100%; height:255px; mask-image:radial-gradient(ellipse 100% 92% at 0% 0%,#000 0%,rgba(0,0,0,.9) 42%,rgba(0,0,0,.5) 66%,transparent 94%); -webkit-mask-image:radial-gradient(ellipse 100% 92% at 0% 0%,#000 0%,rgba(0,0,0,.9) 42%,rgba(0,0,0,.5) 66%,transparent 94%); } }
+
+
+/* OTP error feedback */
+.otp-grid-error { animation: otp-shake .38s cubic-bezier(.36,.07,.19,.97) both; }
+@keyframes otp-shake { 10%,90% { transform:translateX(-2px); } 20%,80% { transform:translateX(4px); } 30%,50%,70% { transform:translateX(-6px); } 40%,60% { transform:translateX(6px); } }
+.form-notice { line-height:1.45; }
+@media (prefers-reduced-motion: reduce) { .otp-grid-error { animation:none; } }
