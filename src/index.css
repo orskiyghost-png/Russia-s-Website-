@@ -148,3 +148,8 @@ html[data-theme='light'] .oauth-button { color:#182532; background:rgba(255,255,
 html[data-theme='light'] .oauth-button:hover:not(:disabled) { background:#fff; }
 html[data-theme='light'] .oauth-apple svg { color:#111820; }
 @media (max-width:700px) { .oauth-stack { grid-template-columns:1fr; } .oauth-button { min-height:50px; } }
+
+
+/* Map readability correction: do not double-darken CARTO tiles */
+html[data-theme='dark'] .real-map .leaflet-tile-pane { filter: brightness(.86) saturate(.82) contrast(1.04) !important; }
+html[data-theme='dark'] .map-vignette { background: linear-gradient(180deg,rgba(7,9,13,.62) 0%,rgba(7,9,13,.06) 24%,rgba(7,9,13,0) 56%,rgba(7,9,13,.58) 100%), linear-gradient(90deg,rgba(7,9,13,.28),transparent 35%,transparent 76%,rgba(7,9,13,.1)); }
