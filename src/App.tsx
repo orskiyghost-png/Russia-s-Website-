@@ -31,6 +31,8 @@ import {
   Users,
   X,
   Zap,
+  Moon,
+  Sun,
 } from 'lucide-react'
 import { CityMap, LocateMeButton } from './CityMap'
 import { useAuth } from './auth'
@@ -63,7 +65,8 @@ type Toast = { message: string; tone?: 'error' | 'success' }
 
 function App() {
   const { user, loading: authLoading, configured } = useAuth()
-  const theme = 'light' as const
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => { try { return (localStorage.getItem('pulse-theme') as 'light' | 'dark') || 'light' } catch { return 'light' } })
+  useEffect(() => { document.documentElement.dataset.theme = theme; try { localStorage.setItem('pulse-theme', theme) } catch { /* storage may be disabled */ } }, [theme])
   const [events, setEvents] = useState<RadarEvent[]>([])
   const [eventsLoading, setEventsLoading] = useState(true)
   const [savingEvent, setSavingEvent] = useState(false)
@@ -109,7 +112,10 @@ function App() {
     })
   }
 
+  const requirePermanentAccount = () => { setIsAuthOpen(true); notify('Войдите, чтобы ставить лайки и писать комментарии', 'error') }
+
   const reactToEvent = async (event: RadarEvent) => {
+    if (!user || user.isAnonymous) { requirePermanentAccount(); return }
     const previous = event
     const optimisticLiked = !Boolean(event.likedByMe)
     const optimistic = { ...event, likedByMe: optimisticLiked, reactions: Math.max(0, event.reactions + (optimisticLiked ? 1 : -1)) }
@@ -140,6 +146,7 @@ function App() {
   }
 
   const commentOnEvent = async (event: RadarEvent, text: string) => {
+    if (!user || user.isAnonymous) { requirePermanentAccount(); return }
     try {
       const result = await addComment(event.id, text)
       const next = { ...event, comments: result.comments, commentsList: [...(event.commentsList ?? []), result.comment] }
@@ -268,6 +275,7 @@ function App() {
       </div>
       <div className="header-actions">
         <span className="live-indicator"><i /> В эфире</span>
+        <button className="header-icon-button theme-toggle" onClick={() => setTheme((value) => value === 'light' ? 'dark' : 'light')} aria-label={theme === 'light' ? 'Включить тёмную тему' : 'Включить светлую тему'} title={theme === 'light' ? 'Тёмная тема' : 'Светлая тема'}>{theme === 'light' ? <Moon size={17} /> : <Sun size={17} />}</button>
         <button className="header-icon-button notification-button" onClick={() => setIsNotificationsOpen(true)} aria-label="Уведомления"><Bell size={17} /><span className="unread-dot" /></button>
         {user && !user.isAnonymous ? <button className="user-chip" onClick={() => setIsProfileOpen(true)}><span className="user-avatar">{user.avatarUrl ? <img src={user.avatarUrl} alt="" /> : initials(user.name)}</span><span className="user-name">{user.name}</span><ChevronDown size={14} /></button> : user ? <button className="login-button guest-chip" onClick={() => setIsAuthOpen(true)}><UserRound size={15} /> Гость</button> : <button className="login-button" onClick={() => setIsAuthOpen(true)}><LogIn size={15} /> Войти</button>}
         <button className="mobile-menu-button header-icon-button" onClick={() => setIsMenuOpen((value) => !value)} aria-label="Открыть меню"><Menu size={18} /></button>
@@ -294,7 +302,7 @@ function App() {
       <div className="map-controls glass-panel"><LocateMeButton onLocated={(location) => { setCenter(location); notify('Карта центрирована на вас') }} onError={(message) => notify(message, 'error')} /><button className="map-floating-control" onClick={() => setCenter(DEFAULT_CENTER)} title="Вернуться к Орску" aria-label="Вернуться к Орску"><Navigation size={16} /></button></div>
       {!selectedEvent && <button className="ai-fab glass-panel" onClick={() => setIsAiOpen((value) => !value)} aria-label="Открыть PULSE AI"><Bot size={18} /><span>PULSE AI</span></button>}
 
-      <AnimatePresence>{selectedEvent && <EventSheet event={selectedEvent} canReport={Boolean(user && !user.isAnonymous)} canMessage={Boolean(user && !user.isAnonymous && selectedEvent.userId)} onClose={() => setSelectedEvent(null)} onReact={() => { void reactToEvent(selectedEvent) }} onComment={(text) => { void commentOnEvent(selectedEvent, text) }} onReport={(reason) => { void reportEventFromSheet(selectedEvent, reason) }} onMessage={() => openMessagesFor(selectedEvent)} />}</AnimatePresence>
+      <AnimatePresence>{selectedEvent && <EventSheet event={selectedEvent} canInteract={Boolean(user && !user.isAnonymous)} canReport={Boolean(user && !user.isAnonymous)} canMessage={Boolean(user && !user.isAnonymous && selectedEvent.userId)} onRequireAuth={requirePermanentAccount} onClose={() => setSelectedEvent(null)} onReact={() => { void reactToEvent(selectedEvent) }} onComment={(text) => { void commentOnEvent(selectedEvent, text) }} onReport={(reason) => { void reportEventFromSheet(selectedEvent, reason) }} onMessage={() => openMessagesFor(selectedEvent)} />}</AnimatePresence>
       <motion.div className="event-strip" initial={{ y: 18, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={spring}>
         <div className="strip-heading"><span><Activity size={14} /> В ЭФИРЕ</span><b>{filteredEvents.length} событий</b></div>
         <div className="strip-list">{filteredEvents.slice(0, 4).map((event) => <MiniEvent key={event.id} event={event} selected={event.id === selectedEvent?.id} onClick={() => selectEvent(event)} />)}</div>
@@ -317,19 +325,19 @@ function MiniEvent({ event, selected, onClick }: { event: RadarEvent; selected: 
   return <motion.button className={`mini-event ${selected ? 'selected' : ''} ${isHot ? 'hot' : ''}`} onClick={onClick} initial={{ opacity: 0, y: 7 }} animate={{ opacity: 1, y: 0 }} transition={{ ...spring, duration: .45 }} whileTap={{ scale: .98 }}><span className={`mini-event-icon ${config.color}`}><Icon size={15} /></span><span className="mini-event-copy"><strong>{event.title}</strong><small><MapPin size={11} /> {humanLocation(event.location)}</small></span><span className="mini-event-time">{relativeTime(event.createdAt)}</span><ChevronRight size={14} /></motion.button>
 }
 
-function EventSheet({ event, canReport, canMessage, onClose, onReact, onComment, onReport, onMessage }: { event: RadarEvent; canReport: boolean; canMessage: boolean; onClose: () => void; onReact: () => void; onComment: (text: string) => void; onReport: (reason: string) => void; onMessage: () => void }) {
+function EventSheet({ event, canInteract, canReport, canMessage, onRequireAuth, onClose, onReact, onComment, onReport, onMessage }: { event: RadarEvent; canInteract: boolean; canReport: boolean; canMessage: boolean; onRequireAuth: () => void; onClose: () => void; onReact: () => void; onComment: (text: string) => void; onReport: (reason: string) => void; onMessage: () => void }) {
   const config = kindConfig[event.kind]
   const Icon = config.icon
   const [comment, setComment] = useState('')
   const [reportReason, setReportReason] = useState('')
   const [reporting, setReporting] = useState(false)
-  const submitComment = () => { const value = comment.trim(); if (!value) return; onComment(value); setComment('') }
+  const submitComment = () => { const value = comment.trim(); if (!value) return; if (!canInteract) { onRequireAuth(); return } onComment(value); setComment('') }
   const submitReport = () => { const value = reportReason.trim(); if (!value) return; onReport(value); setReportReason(''); setReporting(false) }
   return <motion.aside className="event-sheet glass-panel" initial={{ opacity: 0, y: 28, scale: .98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 18, scale: .98 }} transition={spring}>
     <div className="sheet-top"><span className={`event-tag ${config.color}`}><Icon size={13} /> {event.category}</span><button className="sheet-close" onClick={onClose} aria-label="Закрыть сигнал"><X size={16} /></button></div>
     <h2>{event.title}</h2><p className="sheet-description">{event.description}</p>
     <div className="sheet-meta"><span><MapPin size={13} /> {humanLocation(event.location)}</span><span><Clock3 size={13} /> {relativeTime(event.createdAt)}</span></div>
-    <div className="sheet-footer"><span className="sheet-user"><span className="tiny-avatar">{event.avatarUrl ? <img src={event.avatarUrl} alt="" /> : initials(event.userName)}</span>{event.userName}</span><button className={`sheet-react ${event.likedByMe ? 'active' : ''}`} onClick={onReact} aria-label={event.likedByMe ? 'Убрать лайк' : 'Поставить лайк'}><ThumbsUp size={14} /> {event.reactions}</button><span className="sheet-comments"><MessageCircle size={14} /> {event.comments}</span></div>
+    <div className="sheet-footer"><span className="sheet-user"><span className="tiny-avatar">{event.avatarUrl ? <img src={event.avatarUrl} alt="" /> : initials(event.userName)}</span>{event.userName}</span><button className={`sheet-react ${event.likedByMe ? 'active' : ''}`} onClick={canInteract ? onReact : onRequireAuth} aria-label={event.likedByMe ? 'Убрать лайк' : 'Поставить лайк'}><ThumbsUp size={14} /> {event.reactions}</button><span className="sheet-comments"><MessageCircle size={14} /> {event.comments}</span></div>
     {!!event.commentsList?.length && <div className="comments-list" aria-label="Комментарии">{event.commentsList.map((item) => <div className="comment-item" key={item.id}><span className="tiny-avatar">{item.avatarUrl ? <img src={item.avatarUrl} alt="" /> : initials(item.userName)}</span><div><strong>{item.userName}</strong><p>{item.body}</p></div></div>)}</div>}
     <form className="comment-form" onSubmit={(event) => { event.preventDefault(); submitComment() }}><input className="text-[16px]" value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Написать комментарий…" aria-label="Комментарий" /><button type="submit" disabled={!comment.trim()} aria-label="Добавить комментарий"><Send size={14} /></button></form>
     {canMessage && <button className="text-action" onClick={onMessage}><MessageSquare size={14} /> Написать автору</button>}
