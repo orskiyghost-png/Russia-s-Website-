@@ -576,3 +576,16 @@ html[data-theme='dark'] .real-map .leaflet-tile-pane {
   .profile-modal{max-height:calc(100dvh - 26px);overflow:auto}.profile-modal-header{gap:13px}.profile-actions{gap:8px}.profile-actions>*{flex:1;justify-content:center}.logout-action,.primary-action.compact{min-height:46px}
   .setting-toggle{min-height:68px}.notification-row{border-radius:22px}
 }
+
+
+/* Phase 1 marker contract: fixed CSS-pixel icons, no signal circles */
+.pulse-leaflet-marker-wrapper{width:34px!important;height:34px!important;background:transparent!important;border:0!important;transform:none!important}
+.pulse-leaflet-marker{width:34px!important;height:34px!important;transform:none!important;display:grid;place-items:center}
+.pulse-marker-ring{display:none!important;animation:none!important}
+.pulse-marker-pin{width:34px!important;height:34px!important;transform:none!important;border-radius:50%!important;display:grid;place-items:center;overflow:hidden}
+.pulse-leaflet-marker.is-selected,.pulse-leaflet-marker.is-selected .pulse-marker-pin{width:44px!important;height:44px!important}
+.pulse-leaflet-marker.is-selected .pulse-marker-pin{box-shadow:0 0 0 5px rgba(216,255,115,.28),0 5px 20px rgba(0,0,0,.45);transform:none!important}
+.pulse-marker-avatar{width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block}.pulse-marker-fallback{display:grid;place-items:center;width:100%;height:100%}
+.comments-list{display:flex;flex-direction:column;gap:10px;margin:14px 0 2px;padding-top:12px;border-top:1px solid var(--line)}
+.comment-item{display:flex;align-items:flex-start;gap:8px;color:var(--text-primary)}.comment-item>div{min-width:0}.comment-item strong{font-size:10px}.comment-item p{margin:3px 0 0;color:var(--text-secondary);font-size:11px;line-height:1.4;overflow-wrap:anywhere}
+.sheet-react.active{background:var(--accent-lime);color:var(--accent-lime-ink);border-color:transparent}

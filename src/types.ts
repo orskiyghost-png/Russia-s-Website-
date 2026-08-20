@@ -4,6 +4,14 @@ export type EventKind = 'city' | 'vibe' | 'street' | 'help'
 export type Layer = 'all' | 'roads' | 'utilities' | 'social' | 'incidents'
 export type IconComponent = ComponentType<{ size?: number; strokeWidth?: number; className?: string }>
 
+export type EventComment = {
+  id: string
+  userName: string
+  avatarUrl?: string | null
+  body: string
+  createdAt: number
+}
+
 export type RadarEvent = {
   id: string
   kind: EventKind
@@ -18,6 +26,8 @@ export type RadarEvent = {
   avatarUrl?: string | null
   reactions: number
   comments: number
+  likedByMe?: boolean
+  commentsList?: EventComment[]
 }
 
 export type AuthUser = {

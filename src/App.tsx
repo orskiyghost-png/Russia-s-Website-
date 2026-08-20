@@ -35,9 +35,9 @@ import { CityMap, LocateMeButton } from './CityMap'
 import { useAuth } from './auth'
 import { Captcha } from './Captcha'
 
-import { DEFAULT_CENTER, createEvent as createServerEvent, fetchEvents, kindConfig, layerConfig, relativeTime, subscribeToEvents, eventLayer, updateEventStats } from './data'
+import { DEFAULT_CENTER, addComment, createEvent as createServerEvent, eventLayer, fetchComments, fetchEvents, kindConfig, layerConfig, relativeTime, subscribeToEvents, toggleReaction } from './data'
 
-import type { EventKind, Layer, RadarEvent } from './types'
+import type { EventKind, EventComment, Layer, RadarEvent } from './types'
 
 const spring = { type: 'spring' as const, stiffness: 320, damping: 30 }
 const SEARCH_FALLBACKS: Record<string, [number, number]> = { орск: [51.2049, 58.5668], москва: [55.7558, 37.6173], казань: [55.7879, 49.1233], екатеринбург: [56.8389, 60.6057], 'санкт-петербург': [59.9343, 30.3351] }
@@ -94,24 +94,45 @@ function App() {
   }
 
   const selectEvent = (event: RadarEvent) => {
-    setSelectedEvent(event)
+    setSelectedEvent({ ...event, commentsList: [] })
     setIsAiOpen(false)
+    void fetchComments(event.id).then((commentsList) => {
+      setSelectedEvent((current) => current?.id === event.id ? { ...current, commentsList } : current)
+    }).catch(() => {
+      setSelectedEvent((current) => current?.id === event.id ? { ...current, commentsList: [] } : current)
+    })
   }
 
   const reactToEvent = async (event: RadarEvent) => {
-    const next = { ...event, reactions: event.reactions + 1 }
-    setEvents((current) => current.map((item) => item.id === event.id ? next : item))
-    setSelectedEvent((current) => current?.id === event.id ? next : current)
-    notify('Лайк сохранён')
-    try { await updateEventStats(event.id, { reactions: next.reactions }) } catch { /* local optimistic state remains visible */ }
+    const previous = event
+    const optimisticLiked = !Boolean(event.likedByMe)
+    const optimistic = { ...event, likedByMe: optimisticLiked, reactions: Math.max(0, event.reactions + (optimisticLiked ? 1 : -1)) }
+    setEvents((current) => current.map((item) => item.id === event.id ? optimistic : item))
+    setSelectedEvent((current) => current?.id === event.id ? optimistic : current)
+    try {
+      const result = await toggleReaction(event.id)
+      const next = { ...optimistic, reactions: result.reactions, likedByMe: result.likedByMe }
+      setEvents((current) => current.map((item) => item.id === event.id ? next : item))
+      setSelectedEvent((current) => current?.id === event.id ? next : current)
+      notify(result.likedByMe ? 'Лайк поставлен' : 'Лайк убран')
+    } catch {
+      setEvents((current) => current.map((item) => item.id === event.id ? previous : item))
+      setSelectedEvent((current) => current?.id === event.id ? previous : current)
+      notify('Не удалось сохранить реакцию. Попробуйте ещё раз.', 'error')
+    }
   }
 
   const commentOnEvent = async (event: RadarEvent, text: string) => {
-    const next = { ...event, comments: event.comments + 1 }
-    setEvents((current) => current.map((item) => item.id === event.id ? next : item))
-    setSelectedEvent((current) => current?.id === event.id ? next : current)
-    notify('Комментарий добавлен')
-    try { await updateEventStats(event.id, { comments: next.comments }) } catch { /* local optimistic state remains visible */ }
+    try {
+      const result = await addComment(event.id, text)
+      const next = { ...event, comments: result.comments, commentsList: [...(event.commentsList ?? []), result.comment] }
+      setEvents((current) => current.map((item) => item.id === event.id ? { ...item, comments: result.comments } : item))
+      setSelectedEvent((current) => current?.id === event.id ? next : current)
+      notify('Комментарий опубликован')
+    } catch (error) {
+      const code = error instanceof Error ? error.message : ''
+      notify(code.includes('COMMENT_RATE_LIMIT') ? 'Комментарии временно ограничены. Попробуйте позже.' : 'Не удалось опубликовать комментарий. Попробуйте ещё раз.', 'error')
+    }
   }
 
   useEffect(() => {
@@ -278,7 +299,14 @@ function EventSheet({ event, onClose, onReact, onComment }: { event: RadarEvent;
   const Icon = config.icon
   const [comment, setComment] = useState('')
   const submitComment = () => { const value = comment.trim(); if (!value) return; onComment(value); setComment('') }
-  return <motion.aside className="event-sheet glass-panel" initial={{ opacity: 0, y: 28, scale: .98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 18, scale: .98 }} transition={spring}><div className="sheet-top"><span className={`event-tag ${config.color}`}><Icon size={13} /> {event.category}</span><button className="sheet-close" onClick={onClose} aria-label="Закрыть сигнал"><X size={16} /></button></div><h2>{event.title}</h2><p className="sheet-description">{event.description}</p><div className="sheet-meta"><span><MapPin size={13} /> {event.location}</span><span><Clock3 size={13} /> {relativeTime(event.createdAt)}</span></div><div className="sheet-footer"><span className="sheet-user"><span className="tiny-avatar">{event.avatarUrl ? <img src={event.avatarUrl} alt="" /> : initials(event.userName)}</span>{event.userName}</span><button className="sheet-react" onClick={onReact} aria-label="Поставить лайк"><ThumbsUp size={14} /> {event.reactions}</button><span className="sheet-comments"><MessageCircle size={14} /> {event.comments}</span></div><form className="comment-form" onSubmit={(event) => { event.preventDefault(); submitComment() }}><input className="text-[16px]" value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Написать комментарий…" aria-label="Комментарий" /><button type="submit" disabled={!comment.trim()} aria-label="Добавить комментарий"><Send size={14} /></button></form></motion.aside>
+  return <motion.aside className="event-sheet glass-panel" initial={{ opacity: 0, y: 28, scale: .98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 18, scale: .98 }} transition={spring}>
+    <div className="sheet-top"><span className={`event-tag ${config.color}`}><Icon size={13} /> {event.category}</span><button className="sheet-close" onClick={onClose} aria-label="Закрыть сигнал"><X size={16} /></button></div>
+    <h2>{event.title}</h2><p className="sheet-description">{event.description}</p>
+    <div className="sheet-meta"><span><MapPin size={13} /> {event.location}</span><span><Clock3 size={13} /> {relativeTime(event.createdAt)}</span></div>
+    <div className="sheet-footer"><span className="sheet-user"><span className="tiny-avatar">{event.avatarUrl ? <img src={event.avatarUrl} alt="" /> : initials(event.userName)}</span>{event.userName}</span><button className={`sheet-react ${event.likedByMe ? 'active' : ''}`} onClick={onReact} aria-label={event.likedByMe ? 'Убрать лайк' : 'Поставить лайк'}><ThumbsUp size={14} /> {event.reactions}</button><span className="sheet-comments"><MessageCircle size={14} /> {event.comments}</span></div>
+    {!!event.commentsList?.length && <div className="comments-list" aria-label="Комментарии">{event.commentsList.map((item) => <div className="comment-item" key={item.id}><span className="tiny-avatar">{item.avatarUrl ? <img src={item.avatarUrl} alt="" /> : initials(item.userName)}</span><div><strong>{item.userName}</strong><p>{item.body}</p></div></div>)}</div>}
+    <form className="comment-form" onSubmit={(event) => { event.preventDefault(); submitComment() }}><input className="text-[16px]" value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Написать комментарий…" aria-label="Комментарий" /><button type="submit" disabled={!comment.trim()} aria-label="Добавить комментарий"><Send size={14} /></button></form>
+  </motion.aside>
 }
 
 function AuthModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {

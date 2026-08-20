@@ -66,12 +66,13 @@ function markerIcon(event: RadarEvent, selected: boolean) {
   const avatar = safeAvatar
     ? `<img class="pulse-marker-avatar" src="${safeAvatar}" alt="" loading="lazy" />`
     : `<span class="pulse-marker-fallback">${escapeAttribute(initials(event.userName))}</span>`
+  const size = selected ? 44 : 34
   return L.divIcon({
     className: 'pulse-leaflet-marker-wrapper',
-    html: `<div class="pulse-leaflet-marker marker-${color} ${selected ? 'is-selected' : ''}" title="${escapeAttribute(event.title)}"><span class="pulse-marker-ring"></span><span class="pulse-marker-pin">${avatar}</span></div>`,
-    iconSize: [48, 48],
-    iconAnchor: [24, 24],
-    popupAnchor: [0, -26],
+    html: `<div class="pulse-leaflet-marker marker-${color} ${selected ? 'is-selected' : ''}" title="${escapeAttribute(event.title)}"><span class="pulse-marker-pin">${avatar}</span></div>`,
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size],
+    popupAnchor: [0, -size],
   })
 }
 

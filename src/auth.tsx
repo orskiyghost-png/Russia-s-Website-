@@ -78,7 +78,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
     updateProfile: async (updates) => {
       if (!user || user.isAnonymous) return 'Постоянный аккаунт нужен для сохранения профиля'
-      const { error } = await supabase.from('profiles').update(updates).eq('id', user.id)
+      const payload: Record<string, unknown> = {}
+      if (updates.name !== undefined) payload.name = updates.name
+      if (updates.city !== undefined) payload.city = updates.city
+      if (updates.notifications !== undefined) payload.notifications = updates.notifications
+      if (updates.avatarUrl !== undefined) payload.avatar_url = updates.avatarUrl
+      const { error } = await supabase.from('profiles').update(payload).eq('id', user.id)
       if (error) return translateAuthError(error.message)
       setUser({ ...user, ...updates })
       return null
