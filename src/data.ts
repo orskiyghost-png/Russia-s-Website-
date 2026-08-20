@@ -3,7 +3,7 @@ import type { RealtimeChannel } from '@supabase/supabase-js'
 import type { IconComponent, RadarEvent, EventKind, Layer } from './types'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
 
-export const DEFAULT_CENTER: [number, number] = [55.7558, 37.6173]
+export const DEFAULT_CENTER: [number, number] = [51.2049, 58.5668]
 
 export const layerConfig: Array<{ id: Layer; label: string; icon: IconComponent; color: string }> = [
   { id: 'all', label: 'Все события', icon: Layers3, color: 'lime' },
@@ -21,12 +21,10 @@ export const kindConfig: Record<EventKind, { label: string; color: string; icon:
 }
 
 export const seedEvents: RadarEvent[] = [
-  { id: 'moscow-water', kind: 'city', category: 'Коммунальное', title: 'Нет воды до 18:00', description: 'Аварийные работы на магистрали. Ближайший кран с питьевой водой — в 480 м.', location: 'ул. Большая Никитская, 22', lat: 55.7577, lng: 37.6012, createdAt: Date.now() - 12 * 60_000, userName: 'Городской штаб', reactions: 42, comments: 8 },
-  { id: 'patriarch-vibe', kind: 'vibe', category: 'Вайб', title: 'Тихий двор, идеальный закат', description: 'Люди сидят на лавочках, играет винил из открытого окна. Спокойно и очень красиво.', location: 'Патриаршие пруды', lat: 55.7654, lng: 37.5944, createdAt: Date.now() - 8 * 60_000, userName: 'masha.wav', reactions: 76, comments: 14 },
-  { id: 'hermitage-skate', kind: 'street', category: 'Стрит-культура', title: 'Новый спот для скейта', description: 'Свежий спот с плоскими гранями и мягким светом после 19:00. Уровень: любой.', location: 'Сад Эрмитаж', lat: 55.7704, lng: 37.6162, createdAt: Date.now() - 34 * 60_000, userName: 'anton_ollie', reactions: 31, comments: 5 },
-  { id: 'bread-share', kind: 'help', category: 'Соседская помощь', title: 'Отдам домашний хлеб', description: 'Заквасочный хлеб, испечён сегодня утром. Осталось 2 буханки, забрать до 20:00.', location: 'Климентовский пер., 8', lat: 55.7418, lng: 37.6278, createdAt: Date.now() - 60 * 60_000, userName: 'sosedka_ira', reactions: 18, comments: 3 },
-  { id: 'sadovoe-traffic', kind: 'city', category: 'Дорожная обстановка', title: 'Движение в одну полосу', description: 'Из-за небольшого ДТП правая полоса перекрыта. Ожидаем восстановление движения.', location: 'Садовое кольцо, 41', lat: 55.7658, lng: 37.6373, createdAt: Date.now() - 26 * 60_000, userName: 'PULSE AI', reactions: 23, comments: 11 },
-  { id: 'popup-sale', kind: 'vibe', category: 'Событие', title: 'Pop-up распродажа во дворе', description: 'Локальные бренды, винил и кофе. Работает сегодня до 22:00.', location: 'Чистые пруды', lat: 55.7648, lng: 37.6404, createdAt: Date.now() - 2 * 60 * 60_000, userName: 'citycurator', reactions: 54, comments: 19 },
+  { id: 'orsk-water', kind: 'city', category: 'Коммунальное', title: 'Воду вернут к 18:00', description: 'Коммунальная бригада работает на линии. Питьевая вода доступна у соседнего дома.', location: 'проспект Ленина', lat: 51.2038, lng: 58.5662, createdAt: Date.now() - 12 * 60_000, userName: 'Городской штаб', reactions: 12, comments: 3 },
+  { id: 'orsk-vibe', kind: 'vibe', category: 'Вайб', title: 'Тихий вечер у реки', description: 'Спокойный маршрут для прогулки: мягкий свет, открытые веранды и музыка во дворах.', location: 'Набережная Урала', lat: 51.2152, lng: 58.5793, createdAt: Date.now() - 8 * 60_000, userName: 'orsk.wav', reactions: 24, comments: 5 },
+  { id: 'orsk-street', kind: 'street', category: 'Стрит-культура', title: 'Новый спот для роликов', description: 'Ровная площадка с хорошим светом после 19:00. Подходит для новичков.', location: 'Парк Строителей', lat: 51.2058, lng: 58.5584, createdAt: Date.now() - 34 * 60_000, userName: 'anton_ollie', reactions: 18, comments: 4 },
+  { id: 'orsk-help', kind: 'help', category: 'Соседская помощь', title: 'Отдам домашнюю выпечку', description: 'Свежий хлеб и пироги, можно забрать сегодня до 20:00.', location: '2-й микрорайон', lat: 51.1887, lng: 58.5611, createdAt: Date.now() - 60 * 60_000, userName: 'sosedka_ira', reactions: 9, comments: 2 },
 ]
 
 type EventRow = {

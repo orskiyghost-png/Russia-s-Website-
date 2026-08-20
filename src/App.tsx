@@ -176,8 +176,8 @@ function App() {
       <CityMap center={center} events={filteredEvents} selectedId={selectedEvent?.id} onSelect={setSelectedEvent} onMapClick={openReportAt} />
       {(eventsLoading || searching || authLoading) && <MapSkeleton label={searching ? 'Ищем город…' : 'Синхронизируем радар…'} />}
       <div className="map-vignette" />
-      <div className="map-title-block"><p>МОСКВА · ОБНОВЛЕНО ТОЛЬКО ЧТО</p><h1>Город в реальном <em>времени</em></h1><span><Users size={13} /> {events.length + 18} сигналов в радиусе 2 км</span></div>
-      <div className="map-controls glass-panel"><LocateMeButton onLocated={(location) => { setCenter(location); notify('Карта центрирована на вас') }} onError={(message) => notify(message, 'error')} /><button className="map-floating-control" onClick={() => setCenter(DEFAULT_CENTER)} title="Вернуться к Москве" aria-label="Вернуться к Москве"><Navigation size={16} /></button></div>
+      <div className="map-title-block"><p>ОРСК · ОБНОВЛЕНО ТОЛЬКО ЧТО</p><h1>Город в реальном <em>времени</em></h1><span><Users size={13} /> {events.length} сигналов в радиусе 2 км</span></div>
+      <div className="map-controls glass-panel"><LocateMeButton onLocated={(location) => { setCenter(location); notify('Карта центрирована на вас') }} onError={(message) => notify(message, 'error')} /><button className="map-floating-control" onClick={() => setCenter(DEFAULT_CENTER)} title="Вернуться к Орску" aria-label="Вернуться к Орску"><Navigation size={16} /></button></div>
       <MapClickHint onClick={() => openReportAt()} />
 
       <AnimatePresence>{selectedEvent && <EventSheet event={selectedEvent} onClose={() => setSelectedEvent(null)} onReact={() => notify('Реакция сохранена')} />}</AnimatePresence>
@@ -185,8 +185,8 @@ function App() {
         <div className="strip-heading"><span><Activity size={14} /> В ЭФИРЕ</span><b>{filteredEvents.length} событий</b></div>
         <div className="strip-list">{filteredEvents.slice(0, 4).map((event) => <MiniEvent key={event.id} event={event} selected={event.id === selectedEvent?.id} onClick={() => setSelectedEvent(event)} />)}</div>
       </motion.div>
-    </main>    {!configured && <div className="backend-banner glass-panel"><Zap size={14} /><span>Preview mode: подключите Supabase, чтобы включить общие события и email-auth</span><button onClick={() => setIsAuthOpen(true)}>Настроить <ArrowRight size={13} /></button></div>}
-    <div className="bottom-actions glass-panel"><button onClick={() => openReportAt()} className="add-event-button"><Plus size={17} /> Создать сигнал <kbd>⌘ N</kbd></button><span className="map-attribution">Карта © OpenStreetMap contributors</span><span className="desktop-only-hint"><Crosshair size={13} /> Кликните по любой точке карты, чтобы поставить метку</span></div>
+    </main>    {!configured && <div className="backend-banner glass-panel"><Zap size={14} /><span>Локальный режим: подключите Supabase, чтобы включить общие события и Email OTP</span><button onClick={() => setIsAuthOpen(true)}>Настроить <ArrowRight size={13} /></button></div>}
+    <div className="bottom-actions glass-panel"><button onClick={() => openReportAt()} className="add-event-button"><Plus size={17} /> Создать сигнал <kbd>⌘ N</kbd></button><span className="map-attribution">Карта © OpenStreetMap contributors</span><span className="desktop-only-hint"><Crosshair size={13} /> Нажмите на карту, чтобы поставить метку в Орске</span></div>
 
     <AnimatePresence>{isAuthOpen && <AuthModal onClose={() => setIsAuthOpen(false)} onSuccess={() => { setIsAuthOpen(false); notify('Добро пожаловать в PULSE') }} />}</AnimatePresence>
     <AnimatePresence>{isReportOpen && pendingCoords && <ReportModal coords={pendingCoords} onClose={() => { setIsReportOpen(false); setPendingCoords(null) }} onSubmit={createEvent} />}</AnimatePresence>
