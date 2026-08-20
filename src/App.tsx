@@ -40,6 +40,8 @@ import { DEFAULT_CENTER, addComment, createEvent as createServerEvent, eventLaye
 import type { EventKind, EventComment, Layer, RadarEvent } from './types'
 
 const spring = { type: 'spring' as const, stiffness: 320, damping: 30 }
+const panelSpring = { type: 'spring' as const, stiffness: 340, damping: 32, mass: .8 }
+const humanLocation = (value: string) => /^-?\d+\.\d+,\s*-?\d+\.\d+$/.test(value) ? 'Рядом с Орском' : value
 const SEARCH_FALLBACKS: Record<string, [number, number]> = { орск: [51.2049, 58.5668], москва: [55.7558, 37.6173], казань: [55.7879, 49.1233], екатеринбург: [56.8389, 60.6057], 'санкт-петербург': [59.9343, 30.3351] }
 const OTP_EMAIL_QUOTA_KEY = 'pulse-otp-email-quota-until'
 const OTP_EMAIL_QUOTA_MS = 60 * 60 * 1000
@@ -244,7 +246,7 @@ function App() {
         {searchMessage && <span className="search-result-label">{searchMessage}</span>}
       </div>
       <div className="header-actions">
-        <span className="live-indicator"><i /> live</span>
+        <span className="live-indicator"><i /> В эфире</span>
         <button className="header-icon-button notification-button" onClick={() => setIsNotificationsOpen(true)} aria-label="Уведомления"><Bell size={17} /><span className="unread-dot" /></button>
         {user && !user.isAnonymous ? <button className="user-chip" onClick={() => setIsProfileOpen(true)}><span className="user-avatar">{user.avatarUrl ? <img src={user.avatarUrl} alt="" /> : initials(user.name)}</span><span className="user-name">{user.name}</span><ChevronDown size={14} /></button> : user ? <button className="login-button guest-chip" onClick={() => setIsAuthOpen(true)}><UserRound size={15} /> Гость</button> : <button className="login-button" onClick={() => setIsAuthOpen(true)}><LogIn size={15} /> Войти</button>}
         <button className="mobile-menu-button header-icon-button" onClick={() => setIsMenuOpen((value) => !value)} aria-label="Открыть меню"><Menu size={18} /></button>
@@ -253,18 +255,18 @@ function App() {
 
     <AnimatePresence initial={false}>
       {isMenuOpen && <motion.button className="drawer-backdrop" aria-label="Закрыть меню" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.22 }} onClick={() => setIsMenuOpen(false)} />}
-      <motion.aside className="layer-rail glass-panel" initial={{ x: '-108%', opacity: 0 }} animate={{ x: isMenuOpen ? 0 : '-108%', opacity: isMenuOpen ? 1 : 0 }} exit={{ x: '-108%', opacity: 0 }} transition={{ type: 'spring', stiffness: 360, damping: 32, mass: 0.72 }} aria-hidden={!isMenuOpen}>
+      <motion.aside className="layer-rail glass-panel" initial={{ x: '-108%', opacity: 0 }} animate={{ x: isMenuOpen ? 0 : '-108%', opacity: isMenuOpen ? 1 : 0 }} exit={{ x: '-108%', opacity: 0 }} transition={panelSpring} aria-hidden={!isMenuOpen}>
         <div className="rail-heading"><span>КАТЕГОРИИ</span><button onClick={() => setIsMenuOpen(false)}><X size={15} /></button></div>
         {layerConfig.map((layer) => { const LayerIcon = layer.icon; return <motion.button key={layer.id} whileTap={{ scale: 0.98 }} className={`layer-button ${activeLayer === layer.id ? 'active' : ''}`} onClick={() => { setActiveLayer(layer.id); setIsMenuOpen(false) }}><span className={`layer-symbol ${layer.color}`}><LayerIcon size={16} /></span><span>{layer.label}</span>{layer.id === 'all' && <b>{events.length}</b>}</motion.button> })}
         <div className="rail-divider" />
         <button className="layer-button" onClick={() => openReportAt()}><span className="layer-symbol lime"><Plus size={16} /></span><span>Добавить метку</span></button>
-        <div className="rail-footer"><div className="ai-badge"><Sparkles size={14} /><span><strong>PULSE AI</strong><small>42 источника онлайн</small></span></div><span className="connection-state"><i /> синхронизировано</span></div>
+        <div className="rail-footer"><div className="ai-badge"><Sparkles size={14} /><span><strong>PULSE AI</strong><small>Местные сигналы рядом</small></span></div><span className="connection-state"><i /> Город рядом</span></div>
       </motion.aside>
     </AnimatePresence>
 
     <main className="map-stage">
       <CityMap center={center} events={filteredEvents} selectedId={selectedEvent?.id} theme={theme} onSelect={selectEvent} onMapClick={openReportAt} />
-      {(eventsLoading || searching || authLoading) && <MapSkeleton label={searching ? 'Ищем город…' : 'Синхронизируем радар…'} />}
+      {(eventsLoading || searching || authLoading) && <MapSkeleton label={searching ? 'Ищем город…' : 'Обновляем события…'} />}
       <div className="map-vignette" />
       <div className="map-title-wash" aria-hidden="true" />
       <div className="map-title-block"><p>ОРСК · ОБНОВЛЕНО ТОЛЬКО ЧТО</p><h1>Город в реальном <em>времени</em></h1><span><Users size={13} /> {events.length} сигналов в радиусе 2 км</span></div>
@@ -276,8 +278,8 @@ function App() {
         <div className="strip-heading"><span><Activity size={14} /> В ЭФИРЕ</span><b>{filteredEvents.length} событий</b></div>
         <div className="strip-list">{filteredEvents.slice(0, 4).map((event) => <MiniEvent key={event.id} event={event} selected={event.id === selectedEvent?.id} onClick={() => selectEvent(event)} />)}</div>
       </motion.div>
-    </main>    {!configured && <div className="backend-banner glass-panel"><Zap size={14} /><span>Локальный режим: подключите Supabase, чтобы включить общие события и Email OTP</span><button onClick={() => setIsAuthOpen(true)}>Настроить <ArrowRight size={13} /></button></div>}
-    <div className="bottom-actions glass-panel"><button onClick={() => openReportAt()} className="add-event-button"><Plus size={17} /> Создать сигнал <kbd>⌘ N</kbd></button><span className="desktop-only-hint"><Crosshair size={13} /> Нажмите на карту, чтобы поставить метку в Орске</span></div>
+    </main>    {!configured && <div className="backend-banner glass-panel"><Zap size={14} /><span>Карта доступна для просмотра. Общие сигналы появятся после подключения аккаунта.</span><button onClick={() => setIsAuthOpen(true)}>Войти <ArrowRight size={13} /></button></div>}
+    <div className="bottom-actions glass-panel"><button onClick={() => openReportAt()} className="add-event-button"><Plus size={17} /> Создать сигнал <kbd>⌘ N</kbd></button><span className="desktop-only-hint"><Crosshair size={13} /> Выберите место на карте, чтобы добавить сигнал</span></div>
 
     <AnimatePresence>{isAuthOpen && <AuthModal onClose={() => setIsAuthOpen(false)} onSuccess={() => { setIsAuthOpen(false); notify('Добро пожаловать в PULSE') }} />}</AnimatePresence>
     <AnimatePresence>{isReportOpen && pendingCoords && <ReportModal coords={pendingCoords} onClose={() => { setIsReportOpen(false); setPendingCoords(null) }} onSubmit={createEvent} />}</AnimatePresence>
@@ -291,7 +293,7 @@ function MiniEvent({ event, selected, onClick }: { event: RadarEvent; selected: 
   const config = kindConfig[event.kind]
   const Icon = config.icon
   const isHot = Date.now() - event.createdAt < 45 * 60_000
-  return <motion.button className={`mini-event ${selected ? 'selected' : ''} ${isHot ? 'hot' : ''}`} onClick={onClick} initial={{ opacity: 0, y: 7 }} animate={{ opacity: 1, y: 0 }} transition={{ ...spring, duration: .45 }} whileTap={{ scale: .98 }}><span className={`mini-event-icon ${config.color}`}><Icon size={15} /></span><span className="mini-event-copy"><strong>{event.title}</strong><small><MapPin size={11} /> {event.location}</small></span><span className="mini-event-time">{relativeTime(event.createdAt)}</span><ChevronRight size={14} /></motion.button>
+  return <motion.button className={`mini-event ${selected ? 'selected' : ''} ${isHot ? 'hot' : ''}`} onClick={onClick} initial={{ opacity: 0, y: 7 }} animate={{ opacity: 1, y: 0 }} transition={{ ...spring, duration: .45 }} whileTap={{ scale: .98 }}><span className={`mini-event-icon ${config.color}`}><Icon size={15} /></span><span className="mini-event-copy"><strong>{event.title}</strong><small><MapPin size={11} /> {humanLocation(event.location)}</small></span><span className="mini-event-time">{relativeTime(event.createdAt)}</span><ChevronRight size={14} /></motion.button>
 }
 
 function EventSheet({ event, onClose, onReact, onComment }: { event: RadarEvent; onClose: () => void; onReact: () => void; onComment: (text: string) => void }) {
@@ -302,7 +304,7 @@ function EventSheet({ event, onClose, onReact, onComment }: { event: RadarEvent;
   return <motion.aside className="event-sheet glass-panel" initial={{ opacity: 0, y: 28, scale: .98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 18, scale: .98 }} transition={spring}>
     <div className="sheet-top"><span className={`event-tag ${config.color}`}><Icon size={13} /> {event.category}</span><button className="sheet-close" onClick={onClose} aria-label="Закрыть сигнал"><X size={16} /></button></div>
     <h2>{event.title}</h2><p className="sheet-description">{event.description}</p>
-    <div className="sheet-meta"><span><MapPin size={13} /> {event.location}</span><span><Clock3 size={13} /> {relativeTime(event.createdAt)}</span></div>
+    <div className="sheet-meta"><span><MapPin size={13} /> {humanLocation(event.location)}</span><span><Clock3 size={13} /> {relativeTime(event.createdAt)}</span></div>
     <div className="sheet-footer"><span className="sheet-user"><span className="tiny-avatar">{event.avatarUrl ? <img src={event.avatarUrl} alt="" /> : initials(event.userName)}</span>{event.userName}</span><button className={`sheet-react ${event.likedByMe ? 'active' : ''}`} onClick={onReact} aria-label={event.likedByMe ? 'Убрать лайк' : 'Поставить лайк'}><ThumbsUp size={14} /> {event.reactions}</button><span className="sheet-comments"><MessageCircle size={14} /> {event.comments}</span></div>
     {!!event.commentsList?.length && <div className="comments-list" aria-label="Комментарии">{event.commentsList.map((item) => <div className="comment-item" key={item.id}><span className="tiny-avatar">{item.avatarUrl ? <img src={item.avatarUrl} alt="" /> : initials(item.userName)}</span><div><strong>{item.userName}</strong><p>{item.body}</p></div></div>)}</div>}
     <form className="comment-form" onSubmit={(event) => { event.preventDefault(); submitComment() }}><input className="text-[16px]" value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Написать комментарий…" aria-label="Комментарий" /><button type="submit" disabled={!comment.trim()} aria-label="Добавить комментарий"><Send size={14} /></button></form>
