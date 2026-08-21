@@ -206,12 +206,24 @@ export function relativeTime(timestamp: number) {
   return `${hours} ч назад`
 }
 
+function errorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message
+  if (typeof error === 'object' && error !== null && 'message' in error) {
+    const message = (error as { message: unknown }).message
+    return typeof message === 'string' ? message : JSON.stringify(message ?? error)
+  }
+  return String(error)
+}
+
 export function apiErrorKind(error: unknown): 'auth' | 'admin' | 'rate-limit' | 'missing-rpc' | 'other' {
-  const message = error instanceof Error ? error.message : String(error)
+  const message = errorMessage(error)
   const lowered = message.toLowerCase()
   if (message.includes('AUTH_REQUIRED') || message.includes('PERMANENT_ACCOUNT_REQUIRED')) return 'auth'
   if (message.includes('ADMIN_REQUIRED')) return 'admin'
   if (message.includes('RATE_LIMIT') || message.includes('COMMENT_RATE_LIMIT')) return 'rate-limit'
   if (lowered.includes('could not find the function') || (lowered.includes('function') && lowered.includes('does not exist')) || lowered.includes('schema cache')) return 'missing-rpc'
+  // Протухшая/битая сессия: PostgREST отклоняет RPC ошибкой JWT, а supabase-js — ошибкой refresh/session.
+  // Это не «other», а обычный «нужен вход».
+  if (lowered.includes('jwt') || lowered.includes('refresh token') || lowered.includes('session expired') || lowered.includes('invalid claim')) return 'auth'
   return 'other'
 }

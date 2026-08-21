@@ -46,7 +46,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let mounted = true
     const applySession = async (session: Session | null) => {
       if (!session) { if (mounted) setUser(null); return }
-      const nextUser = await hydrateUser(session.user)
+      // Проверяем, что сессия действительно жива (токен не протух и не отозван).
+      // Протухшая сессия выглядит «залогиненной», но все RPC падают — лучше сразу разлогинить.
+      const { data: userData, error: userError } = await supabase.auth.getUser()
+      if (userError || !userData.user) {
+        const message = String(userError?.message ?? '').toLowerCase()
+        const networkIssue = message.includes('fetch') || message.includes('network') || message.includes('timeout') || message.includes('offline')
+        if (networkIssue) {
+          // Сеть недоступна — не выкидываем пользователя, показываем последние данные сессии.
+          const nextUser = await hydrateUser(session.user)
+          if (mounted) setUser(nextUser)
+          return
+        }
+        await supabase.auth.signOut().catch(() => undefined)
+        if (mounted) setUser(null)
+        return
+      }
+      const nextUser = await hydrateUser(userData.user)
       if (mounted) setUser(nextUser)
     }
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => { window.setTimeout(() => { void applySession(session) }, 0) })

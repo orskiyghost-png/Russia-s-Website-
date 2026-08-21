@@ -6,7 +6,8 @@ const ThemeContext = createContext<ThemeContextValue | undefined>(undefined)
 
 function initialTheme(): Theme {
   try {
-    const saved = window.localStorage.getItem('pulse-theme')
+    // v2 ключ: сбрасывает старые сохранённые значения и возвращает тёмную тему по умолчанию (dark-first).
+    const saved = window.localStorage.getItem('pulse-theme-v2')
     if (saved === 'dark' || saved === 'light') return saved
   } catch {
     /* storage may be disabled */
@@ -26,7 +27,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     applyTheme(theme)
     try {
-      window.localStorage.setItem('pulse-theme', theme)
+      window.localStorage.setItem('pulse-theme-v2', theme)
     } catch {
       /* storage may be disabled */
     }

@@ -51,18 +51,18 @@ html[data-theme='dark'] {
 }
 
 html[data-theme='light'] {
-  --canvas: #f4f6f9;
-  --canvas-glow-a: rgba(11, 127, 163, 0.07);
+  --canvas: #eef2f6;
+  --canvas-glow-a: rgba(11, 127, 163, 0.08);
   --canvas-glow-b: rgba(120, 90, 200, 0.05);
 
-  --surface-1: rgba(255, 255, 255, 0.68);
-  --surface-2: rgba(255, 255, 255, 0.65);
-  --surface-3: rgba(15, 30, 45, 0.06);
+  --surface-1: rgba(255, 255, 255, 0.58);
+  --surface-2: rgba(250, 252, 255, 0.55);
+  --surface-3: rgba(15, 30, 45, 0.055);
   --surface-solid: #ffffff;
 
-  --border: rgba(15, 30, 45, 0.12);
-  --border-strong: rgba(15, 30, 45, 0.2);
-  --border-faint: rgba(15, 30, 45, 0.07);
+  --border: rgba(15, 30, 45, 0.14);
+  --border-strong: rgba(15, 30, 45, 0.24);
+  --border-faint: rgba(15, 30, 45, 0.08);
 
   --text-primary: #0c1520;
   --text-secondary: #4d5d6e;
@@ -167,6 +167,7 @@ a { color: inherit; }
   border-radius: var(--r-pill); background: var(--surface-3);
   border: 1px solid var(--border-faint);
   transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease), background 0.2s var(--ease);
+  overflow: visible;
 }
 .header-search-wrap:focus-within {
   border-color: color-mix(in srgb, var(--accent) 48%, transparent);
@@ -202,7 +203,14 @@ a { color: inherit; }
   box-shadow: var(--shadow-2); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
 }
 
-.search-results { position: absolute; z-index: 12; top: calc(100% + 8px); left: 0; right: 0; overflow: hidden; padding: 5px; border: 1px solid var(--border); border-radius: 18px; background: var(--surface-2); box-shadow: var(--shadow-2); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur); }
+.search-results {
+  position: absolute; z-index: 50; top: calc(100% + 8px); left: 0; right: 0;
+  max-height: 55vh; overflow-y: auto; overflow-x: hidden;
+  padding: 5px; border: 1px solid var(--border); border-radius: 18px;
+  background: var(--surface-2); box-shadow: var(--shadow-2);
+  backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+}
+.search-results:empty { display: none; }
 .search-result { width: 100%; display: flex; align-items: center; gap: 10px; padding: 10px 11px; border-radius: 13px; color: var(--text-secondary); text-align: left; transition: background .18s var(--ease), color .18s var(--ease); }
 .search-result:hover, .search-result.first { color: var(--text-primary); background: color-mix(in srgb, var(--accent) 11%, transparent); }
 .search-result.first { box-shadow: inset 2px 0 var(--accent); }
@@ -546,7 +554,10 @@ html[data-theme='light'] .map-vignette {
   transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
 }
 .comment-form:focus-within { border-color: color-mix(in srgb, var(--accent) 42%, transparent); box-shadow: 0 0 0 4px var(--focus-ring); }
-.comment-form input { min-width: 0; flex: 1; border: 0; outline: 0; background: transparent; font-size: 16px; }
+.comment-form input {
+  min-width: 0; flex: 1; border: 0; outline: 0; background: transparent; font-size: 16px;
+  padding: 10px 0;
+}
 .comment-form input::placeholder { color: var(--text-tertiary); }
 .comment-form button {
   width: 34px; height: 34px; display: grid; place-items: center; flex: 0 0 auto;
@@ -751,7 +762,11 @@ html[data-theme='light'] .map-vignette {
 .message-bubble.incoming { align-self: flex-start; border-bottom-left-radius: 6px; }
 .message-bubble.outgoing { align-self: flex-end; border-bottom-right-radius: 6px; border-color: color-mix(in srgb, var(--accent) 30%, transparent); background: color-mix(in srgb, var(--accent) 11%, transparent); }
 .message-compose { display: flex; gap: 8px; align-items: center; margin-top: auto; padding-top: 12px; border-top: 1px solid var(--border-faint); }
-.message-compose input { min-width: 0; flex: 1; font-size: 16px; }
+.message-compose input {
+  min-width: 0; flex: 1; border: 0; outline: 0; background: transparent;
+  font-size: 16px; padding: 10px 0;
+}
+.message-compose input::placeholder { color: var(--text-tertiary); }
 .message-compose button {
   width: 42px; height: 42px; display: grid; place-items: center; flex: 0 0 auto;
   border: 1px solid transparent; border-radius: 50%; background: var(--accent); color: var(--accent-ink);
@@ -759,7 +774,7 @@ html[data-theme='light'] .map-vignette {
 }
 .message-compose button:not(:disabled):hover { filter: brightness(1.06); }
 .message-compose button:not(:disabled):active { transform: scale(0.92); }
-.message-compose button:disabled { opacity: 0.5; }
+.message-compose button:disabled { background: var(--surface-3); color: var(--text-tertiary); }
 
 /* ---------- PULSE AI ---------- */
 .ai-fab {
@@ -797,8 +812,9 @@ html[data-theme='light'] .map-vignette {
 }
 .ai-input:focus-within { border-color: color-mix(in srgb, var(--accent) 42%, transparent); box-shadow: 0 0 0 4px var(--focus-ring); }
 .ai-input input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font-size: 16px; }
+.ai-input input::placeholder { color: var(--text-tertiary); }
 .ai-input button {
-  width: 32px; height: 32px; display: grid; place-items: center; flex: 0 0 auto;
+  width: 34px; height: 34px; display: grid; place-items: center; flex: 0 0 auto;
   border-radius: 50%; color: var(--accent-ink); background: var(--accent);
   transition: transform 0.18s var(--ease-spring), filter 0.18s var(--ease);
 }
