@@ -27,6 +27,8 @@ VITE_TURNSTILE_SITE_KEY=your-cloudflare-turnstile-site-key
 
 Миграция идемпотентна — повторный запуск безопасен.
 
+**Для уже существующих проектов** (если модерация показывает «Модерация недоступна» или `column reference "id" is ambiguous`): выполните [`supabase/migrations/20260821_fix_admin_list_open_reports.sql`](../supabase/migrations/20260821_fix_admin_list_open_reports.sql) — он пересоздаёт RPC `admin_list_open_reports()` с корректными алиасами колонок.
+
 ## Авторизация: Email + Password + Turnstile
 
 PULSE использует классическую связку **Email + Password** (без OTP и Magic Link).

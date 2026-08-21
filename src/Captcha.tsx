@@ -53,9 +53,13 @@ export function Captcha({ onToken, onError }: { onToken: (token: string) => void
           'expired-callback': () => onToken(''),
           'error-callback': () => {
             onToken('')
-            // Одна автоматическая попытка восстановления виджета, затем понятное сообщение.
-            retryTimer = window.setTimeout(() => setRetry((value) => value + 1), 1600)
-            onError?.('Не удалось загрузить проверку. Пробуем ещё раз…')
+            // Автоматическая попытка восстановления виджета, затем понятное сообщение (без бесконечного цикла).
+            if (retry < 2) {
+              retryTimer = window.setTimeout(() => setRetry((value) => value + 1), 1600)
+              onError?.('Не удалось загрузить проверку. Пробуем ещё раз…')
+            } else {
+              onError?.('Проверка CAPTCHA временно недоступна. Обновите страницу и попробуйте ещё раз.')
+            }
           },
         })
       } catch {

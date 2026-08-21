@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode, type SyntheticEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type SyntheticEvent } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import * as Dialog from '@radix-ui/react-dialog'
 import {
@@ -13,7 +13,6 @@ import {
   Crosshair,
   LogIn,
   LogOut,
-  Mail as MailIcon,
   Map as MapIcon,
   MapPin,
   Menu,
@@ -23,7 +22,6 @@ import {
   Navigation,
   Plus,
   Search,
-  Settings2,
   ShieldCheck,
   Sparkles,
   ThumbsUp,
@@ -39,7 +37,7 @@ import { useAuth } from './auth'
 import { Captcha } from './Captcha'
 import { useTheme } from './theme'
 
-import { DEFAULT_CENTER, addComment, createEvent as createServerEvent, eventLayer, fetchComments, fetchDirectMessages, fetchEvents, fetchOpenReports, kindConfig, layerConfig, relativeTime, reportEvent, reverseGeocode, sendDirectMessage, setEventModerationStatus, subscribeToEvents, toggleReaction } from './data'
+import { DEFAULT_CENTER, addComment, apiErrorKind, createEvent as createServerEvent, eventLayer, fetchComments, fetchDirectMessages, fetchEvents, fetchOpenReports, kindConfig, layerConfig, relativeTime, reportEvent, reverseGeocode, sendDirectMessage, setEventModerationStatus, subscribeToEvents, toggleReaction } from './data'
 
 import type { EventKind, EventComment, Layer, RadarEvent } from './types'
 
@@ -51,20 +49,6 @@ function hideBrokenImage(event: SyntheticEvent<HTMLImageElement>) {
   event.currentTarget.style.display = 'none'
 }
 const SEARCH_FALLBACKS: Record<string, [number, number]> = { орск: [51.2049, 58.5668], москва: [55.7558, 37.6173], казань: [55.7879, 49.1233], екатеринбург: [56.8389, 60.6057], 'санкт-петербург': [59.9343, 30.3351] }
-const OTP_EMAIL_QUOTA_KEY = 'pulse-otp-email-quota-until'
-const OTP_EMAIL_QUOTA_MS = 60 * 60 * 1000
-
-function otpQuotaLocked() {
-  try { return Number(window.localStorage.getItem(OTP_EMAIL_QUOTA_KEY) ?? 0) > Date.now() } catch { return false }
-}
-
-function lockOtpQuota() {
-  try { window.localStorage.setItem(OTP_EMAIL_QUOTA_KEY, String(Date.now() + OTP_EMAIL_QUOTA_MS)) } catch { /* storage may be disabled */ }
-}
-
-function isOtpQuotaError(message: string) {
-  return /слишком много попыток|rate limit|too many|email rate limit|over_email/i.test(message)
-}
 
 type Toast = { message: string; tone?: 'error' | 'success' }
 
@@ -91,6 +75,9 @@ function App() {
   const [isAiOpen, setIsAiOpen] = useState(false)
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [toast, setToast] = useState<Toast | null>(null)
+  const [isSearchOpen, setIsSearchOpen] = useState(false)
+  const searchInputRef = useRef<HTMLInputElement | null>(null)
+  const toastTimer = useRef<number | undefined>(undefined)
 
   const filteredEvents = useMemo(() => {
     const normalized = query.trim().toLowerCase()
@@ -101,12 +88,13 @@ function App() {
     })
   }, [activeLayer, events, query])
 
-  const notify = (message: string, tone: Toast['tone'] = 'success') => {
+  const notify = useCallback((message: string, tone: Toast['tone'] = 'success') => {
     setToast({ message, tone })
-    window.setTimeout(() => setToast(null), 3000)
-  }
+    window.clearTimeout(toastTimer.current)
+    toastTimer.current = window.setTimeout(() => setToast(null), 3000)
+  }, [])
 
-  const selectEvent = (event: RadarEvent) => {
+  const selectEvent = useCallback((event: RadarEvent) => {
     setSelectedEvent({ ...event, commentsList: [] })
     setIsAiOpen(false)
     void fetchComments(event.id).then((commentsList) => {
@@ -114,12 +102,13 @@ function App() {
     }).catch(() => {
       setSelectedEvent((current) => current?.id === event.id ? { ...current, commentsList: [] } : current)
     })
-  }
+  }, [])
 
   const requirePermanentAccount = () => { setIsAuthOpen(true); notify('Войдите, чтобы ставить лайки и писать комментарии', 'error') }
 
   const reactToEvent = async (event: RadarEvent) => {
     if (!user || user.isAnonymous) { requirePermanentAccount(); return }
+    if (event.id.startsWith('orsk-')) { notify('Это демо-событие. Подключите Supabase в Settings → Environment, чтобы ставить реакции.', 'error'); return }
     const previous = event
     const optimisticLiked = !Boolean(event.likedByMe)
     const optimistic = { ...event, likedByMe: optimisticLiked, reactions: Math.max(0, event.reactions + (optimisticLiked ? 1 : -1)) }
@@ -131,9 +120,12 @@ function App() {
       setEvents((current) => current.map((item) => item.id === event.id ? next : item))
       setSelectedEvent((current) => current?.id === event.id ? next : current)
       notify(result.likedByMe ? 'Лайк поставлен' : 'Лайк убран')
-    } catch {
+    } catch (error) {
       setEvents((current) => current.map((item) => item.id === event.id ? previous : item))
       setSelectedEvent((current) => current?.id === event.id ? previous : current)
+      const kind = apiErrorKind(error)
+      if (kind === 'auth') { requirePermanentAccount(); return }
+      if (kind === 'missing-rpc') { notify('Бэкенд не обновлён: примените миграции supabase/migrations в SQL Editor', 'error'); return }
       notify('Не удалось сохранить реакцию. Попробуйте ещё раз.', 'error')
     }
   }
@@ -144,13 +136,17 @@ function App() {
     try {
       await reportEvent(event.id, reason)
       notify('Жалоба отправлена на проверку')
-    } catch {
+    } catch (error) {
+      const kind = apiErrorKind(error)
+      if (kind === 'auth') { requirePermanentAccount(); return }
+      if (kind === 'missing-rpc') { notify('Бэкенд не обновлён: примените миграции supabase/migrations в SQL Editor', 'error'); return }
       notify('Не удалось отправить жалобу. Попробуйте позже.', 'error')
     }
   }
 
   const commentOnEvent = async (event: RadarEvent, text: string) => {
     if (!user || user.isAnonymous) { requirePermanentAccount(); return }
+    if (event.id.startsWith('orsk-')) { notify('Это демо-событие. Подключите Supabase в Settings → Environment, чтобы писать комментарии.', 'error'); return }
     try {
       const result = await addComment(event.id, text)
       const next = { ...event, comments: result.comments, commentsList: [...(event.commentsList ?? []), result.comment] }
@@ -158,8 +154,10 @@ function App() {
       setSelectedEvent((current) => current?.id === event.id ? next : current)
       notify('Комментарий опубликован')
     } catch (error) {
-      const code = error instanceof Error ? error.message : ''
-      notify(code.includes('COMMENT_RATE_LIMIT') ? 'Комментарии временно ограничены. Попробуйте позже.' : 'Не удалось опубликовать комментарий. Попробуйте ещё раз.', 'error')
+      const kind = apiErrorKind(error)
+      if (kind === 'auth') { requirePermanentAccount(); return }
+      if (kind === 'missing-rpc') { notify('Бэкенд не обновлён: примените миграции supabase/migrations в SQL Editor', 'error'); return }
+      notify(kind === 'rate-limit' ? 'Комментарии временно ограничены. Попробуйте позже.' : 'Не удалось опубликовать комментарий. Попробуйте ещё раз.', 'error')
     }
   }
 
@@ -208,6 +206,7 @@ function App() {
       const places = await response.json() as Array<{ lat: string; lon: string; display_name: string }>
       if (!places.length) {
         setSearchMessage('Город не найден')
+        setQuery('')
         notify('Город не найден', 'error')
         return
       }
@@ -219,6 +218,7 @@ function App() {
       notify('Карта перемещена к результату')
     } catch {
       setSearchMessage('Не удалось связаться с Nominatim')
+      setQuery('')
       notify('Поиск временно недоступен. Попробуйте название города ещё раз.', 'error')
     } finally {
       window.clearTimeout(timeout)
@@ -226,7 +226,16 @@ function App() {
     }
   }
 
-  const openReportAt = (coords?: { lat: number; lng: number }) => {
+  const toggleOrSubmitSearch = () => {
+    if (typeof window !== 'undefined' && window.matchMedia('(max-width: 700px)').matches && !isSearchOpen) {
+      setIsSearchOpen(true)
+      window.setTimeout(() => searchInputRef.current?.focus(), 0)
+      return
+    }
+    void searchCity()
+  }
+
+  const openReportAt = useCallback((coords?: { lat: number; lng: number }) => {
     if (!user || user.isAnonymous) {
       setIsAuthOpen(true)
       notify(user?.isAnonymous ? 'Чтобы сохранить сигнал за аккаунтом, войдите через Email + Password' : 'Войдите, чтобы добавлять события', 'error')
@@ -234,7 +243,24 @@ function App() {
     }
     setPendingCoords(coords ?? { lat: center[0], lng: center[1] })
     setIsReportOpen(true)
-  }
+  }, [center, notify, user])
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!event.metaKey && !event.ctrlKey) return
+      const key = event.key.toLowerCase()
+      if (key === 'k') {
+        event.preventDefault()
+        if (typeof window !== 'undefined' && window.matchMedia('(max-width: 700px)').matches) setIsSearchOpen(true)
+        searchInputRef.current?.focus()
+      } else if (key === 'n') {
+        event.preventDefault()
+        openReportAt()
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [openReportAt])
 
   const createEvent = async (payload: { kind: EventKind; title: string; description: string }, captchaToken: string) => {
     if (!pendingCoords || !user || user.isAnonymous || savingEvent) return
@@ -256,8 +282,8 @@ function App() {
       setPendingCoords(null)
       notify('Событие опубликовано для всех жителей')
     } catch (error) {
-      const message = error instanceof Error ? error.message : ''
-      notify(message.includes('RATE_LIMIT') ? 'Лимит: максимум 5 меток за 10 минут' : message.includes('PERMANENT_ACCOUNT_REQUIRED') ? 'Для сигнала нужен постоянный Email + Password аккаунт' : 'Не удалось сохранить событие', 'error')
+      const kind = apiErrorKind(error)
+      notify(kind === 'rate-limit' ? 'Лимит: максимум 5 меток за 10 минут' : kind === 'auth' ? 'Для сигнала нужен постоянный Email + Password аккаунт' : kind === 'missing-rpc' ? 'Бэкенд не обновлён: примените миграции supabase/migrations в SQL Editor' : 'Не удалось сохранить событие', 'error')
     } finally {
       setSavingEvent(false)
     }
@@ -268,13 +294,12 @@ function App() {
       <button className="pulse-logo" onClick={() => { setCenter(DEFAULT_CENTER); setSelectedEvent(null) }} aria-label="В центр карты">
         <span className="logo-orbit"><span /></span><span className="logo-word">PULSE<span>.</span></span>
       </button>
-      <div className="header-search-wrap">
-
-        <button className="search-submit" onClick={() => { void searchCity() }} aria-label="Искать"><Search size={16} /></button>
-        <input className="text-[16px]" value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void searchCity() }} placeholder="Найти город или событие" aria-label="Поиск города" />
-
+      <div className={`header-search-wrap ${isSearchOpen ? 'search-open' : ''}`}>
+        <button className="search-submit" onClick={toggleOrSubmitSearch} aria-label="Искать"><Search size={16} /></button>
+        <input ref={searchInputRef} value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void searchCity(); else if (event.key === 'Escape') setIsSearchOpen(false) }} placeholder="Найти город или событие" aria-label="Поиск города" />
         {searching && <span className="search-status"><i className="search-spinner" /> ищем…</span>}
         <kbd>⌘ K</kbd>
+        {isSearchOpen && <button className="search-close" onClick={() => { setIsSearchOpen(false); setQuery(''); setSearchMessage('') }} aria-label="Закрыть поиск"><X size={14} /></button>}
         {searchMessage && <span className="search-result-label">{searchMessage}</span>}
       </div>
       <div className="header-actions">
@@ -343,9 +368,9 @@ function EventSheet({ event, canInteract, canReport, canMessage, onRequireAuth, 
     <div className="sheet-meta"><span><MapPin size={13} /> {humanLocation(event.location)}</span><span><Clock3 size={13} /> {relativeTime(event.createdAt)}</span></div>
     <div className="sheet-footer"><span className="sheet-user"><span className="tiny-avatar"><span>{initials(event.userName)}</span>{event.avatarUrl && <img src={event.avatarUrl} alt="" onError={hideBrokenImage} />}</span>{event.userName}</span><button className={`sheet-react ${event.likedByMe ? 'active' : ''}`} onClick={canInteract ? onReact : onRequireAuth} aria-label={event.likedByMe ? 'Убрать лайк' : 'Поставить лайк'}><ThumbsUp size={14} /> {event.reactions}</button><span className="sheet-comments"><MessageCircle size={14} /> {event.comments}</span></div>
     {!!event.commentsList?.length && <div className="comments-list" aria-label="Комментарии">{event.commentsList.map((item) => <div className="comment-item" key={item.id}><span className="tiny-avatar"><span>{initials(item.userName)}</span>{item.avatarUrl && <img src={item.avatarUrl} alt="" onError={hideBrokenImage} />}</span><div><strong>{item.userName}</strong><p>{item.body}</p></div></div>)}</div>}
-    <form className="comment-form" onSubmit={(event) => { event.preventDefault(); submitComment() }}><input className="text-[16px]" value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Написать комментарий…" aria-label="Комментарий" /><button type="submit" disabled={!comment.trim()} aria-label="Добавить комментарий"><Send size={14} /></button></form>
+    <form className="comment-form" onSubmit={(event) => { event.preventDefault(); submitComment() }}><input value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Написать комментарий…" aria-label="Комментарий" /><button type="submit" disabled={!comment.trim()} aria-label="Добавить комментарий"><Send size={14} /></button></form>
     {canMessage && <button className="text-action" onClick={onMessage}><MessageSquare size={14} /> Написать автору</button>}
-    {canReport && !event.id.startsWith('orsk-') && <div className="report-area">{reporting ? <form className="report-form" onSubmit={(formEvent) => { formEvent.preventDefault(); submitReport() }}><input className="text-[16px]" value={reportReason} onChange={(inputEvent) => setReportReason(inputEvent.target.value)} placeholder="Что нужно проверить?" aria-label="Причина жалобы" /><button type="submit" disabled={reportReason.trim().length < 3}>Отправить</button></form> : <button className="text-action" onClick={() => setReporting(true)}>Пожаловаться на сигнал</button>}</div>}
+    {canReport && !event.id.startsWith('orsk-') && <div className="report-area">{reporting ? <form className="report-form" onSubmit={(formEvent) => { formEvent.preventDefault(); submitReport() }}><input value={reportReason} onChange={(inputEvent) => setReportReason(inputEvent.target.value)} placeholder="Что нужно проверить?" aria-label="Причина жалобы" /><button type="submit" disabled={reportReason.trim().length < 3}>Отправить</button></form> : <button className="text-action" onClick={() => setReporting(true)}>Пожаловаться на сигнал</button>}</div>}
   </motion.aside>
 }
 
@@ -367,22 +392,27 @@ function AuthModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () 
     if (mode === 'register' && password !== confirmPassword) { setError('Пароли не совпадают'); return }
     // CAPTCHA-токен не блокирует отправку: если виджет недоступен, сервер сам решает.
     setSubmitting(true)
-    const result = mode === 'login' ? await login(email, password, captchaToken) : await register(name, email, password, captchaToken)
-    if (result.error) setError(result.error)
-    else onSuccess()
-    setSubmitting(false)
+    try {
+      const result = mode === 'login' ? await login(email, password, captchaToken) : await register(name, email, password, captchaToken)
+      if (result.error) setError(/captcha/i.test(result.error) ? `${result.error} Если проверка не появляется, добавьте VITE_TURNSTILE_SITE_KEY в Settings → Environment.` : result.error)
+      else onSuccess()
+    } catch {
+      setError('Не удалось связаться с сервером. Проверьте подключение и попробуйте ещё раз.')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
-  return <ModalFrame onClose={onClose}><div className="auth-modal w-full max-w-md mx-auto px-4 sm:px-6">
+  return <ModalFrame onClose={onClose}><div className="auth-modal">
     <div className="modal-orbit"><ShieldCheck size={19} /></div>
     <p className="modal-overline">PULSE ACCOUNT / ACCESS</p>
     <h2>{mode === 'login' ? 'Войти в PULSE' : 'Создать аккаунт'}<span>.</span></h2>
     <p className="modal-subtitle">Карта и поиск доступны гостям. Аккаунт нужен для публикации и сохранения сигналов.</p>
     <div className="auth-tabs"><button className={mode === 'login' ? 'active' : ''} onClick={() => { setMode('login'); setError(''); setCaptchaToken('') }}>Вход</button><button className={mode === 'register' ? 'active' : ''} onClick={() => { setMode('register'); setError(''); setCaptchaToken('') }}>Регистрация</button></div>
-    {mode === 'register' && <label className="input-label">Имя<input className="text-[16px]" value={name} onChange={(event) => setName(event.target.value)} placeholder="Как к вам обращаться?" autoComplete="name" /></label>}
-    <label className="input-label">Email<input className="text-[16px]" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" type="email" autoComplete="email" /></label>
-    <label className="input-label">Пароль<input className="text-[16px]" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Минимум 6 символов" type="password" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} /></label>
-    {mode === 'register' && <label className="input-label">Повторите пароль<input className="text-[16px]" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} placeholder="Повторите пароль" type="password" autoComplete="new-password" /></label>}
+    {mode === 'register' && <label className="input-label">Имя<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Как к вам обращаться?" autoComplete="name" /></label>}
+    <label className="input-label">Email<input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" type="email" autoComplete="email" /></label>
+    <label className="input-label">Пароль<input value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Минимум 6 символов" type="password" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} /></label>
+    {mode === 'register' && <label className="input-label">Повторите пароль<input value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} placeholder="Повторите пароль" type="password" autoComplete="new-password" /></label>}
     <Captcha onToken={setCaptchaToken} onError={setError} />
     <button className="primary-action" disabled={submitting} onClick={() => { void submit() }}>{submitting ? 'Проверяем…' : mode === 'login' ? 'Войти' : 'Зарегистрироваться'}<ArrowRight size={16} /></button>
     {error && <p className="form-error">{error}</p>}
@@ -397,7 +427,7 @@ function ReportModal({ coords, onClose, onSubmit }: { coords: { lat: number; lng
   const [description, setDescription] = useState('')
   const [captchaToken, setCaptchaToken] = useState('')
   const [captchaError, setCaptchaError] = useState('')
-  return <ModalFrame onClose={onClose}><div className="report-modal"><div className="modal-heading-row"><div><p className="modal-overline">НОВЫЙ СИГНАЛ</p><h2>Добавить на карту<span>.</span></h2></div><span className="coordinate-chip"><MapPin size={12} /> {coords.lat.toFixed(4)}, {coords.lng.toFixed(4)}</span></div><p className="modal-subtitle">Сообщите соседям, что происходит в этой точке.</p><div className="category-grid">{(Object.keys(kindConfig) as EventKind[]).map((item) => { const config = kindConfig[item]; const Icon = config.icon; return <button key={item} className={`category-option ${config.color} ${kind === item ? 'selected' : ''}`} onClick={() => setKind(item)}><Icon size={17} /><span>{config.label}</span>{kind === item && <Check size={14} />}</button> })}</div><label className="input-label">Заголовок<input className="text-[16px]" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Например, тихий двор с музыкой" maxLength={80} /></label><label className="input-label">Подробнее<textarea className="text-[16px]" value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Что важно знать другим?" maxLength={240} /></label><Captcha onToken={setCaptchaToken} onError={setCaptchaError} />{captchaError && <p className="form-error">{captchaError}</p>}<button className="primary-action" disabled={!title.trim() || !description.trim()} onClick={() => onSubmit({ kind, title: title.trim(), description: description.trim() }, captchaToken)}>Опубликовать сигнал <ArrowRight size={16} /></button></div></ModalFrame>
+  return <ModalFrame onClose={onClose}><div className="report-modal"><div className="modal-heading-row"><div><p className="modal-overline">НОВЫЙ СИГНАЛ</p><h2>Добавить на карту<span>.</span></h2></div><span className="coordinate-chip"><MapPin size={12} /> {coords.lat.toFixed(4)}, {coords.lng.toFixed(4)}</span></div><p className="modal-subtitle">Сообщите соседям, что происходит в этой точке.</p><div className="category-grid">{(Object.keys(kindConfig) as EventKind[]).map((item) => { const config = kindConfig[item]; const Icon = config.icon; return <button key={item} className={`category-option ${config.color} ${kind === item ? 'selected' : ''}`} onClick={() => setKind(item)}><Icon size={17} /><span>{config.label}</span>{kind === item && <Check size={14} />}</button> })}</div><label className="input-label">Заголовок<input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Например, тихий двор с музыкой" maxLength={80} /></label><label className="input-label">Подробнее<textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Что важно знать другим?" maxLength={240} /></label><Captcha onToken={setCaptchaToken} onError={setCaptchaError} />{captchaError && <p className="form-error">{captchaError}</p>}<button className="primary-action" disabled={!title.trim() || !description.trim()} onClick={() => onSubmit({ kind, title: title.trim(), description: description.trim() }, captchaToken)}>Опубликовать сигнал <ArrowRight size={16} /></button></div></ModalFrame>
 }
 
 function ProfileModal({ onClose, onAdminOpen }: { onClose: () => void; onAdminOpen: () => void }) {
@@ -423,7 +453,7 @@ function ProfileModal({ onClose, onAdminOpen }: { onClose: () => void; onAdminOp
     reader.readAsDataURL(file)
   }
   const save = async () => { setSaving(true); const result = await updateProfile({ name: name.trim() || user.name, city, bio: bio.trim() || null, neighborhood: neighborhood.trim() || null, notifications, avatarUrl: avatarPreview || null }); if (result) setError(result); else onClose(); setSaving(false) }
-  return <ModalFrame onClose={onClose}><div className="profile-modal"><div className="profile-modal-header"><button className="profile-avatar-button" onClick={() => avatarInput.current?.click()} aria-label="Изменить аватар"><span className="large-avatar"><span>{initials(user.name)}</span>{avatarPreview && <img src={avatarPreview} alt="Аватар" onError={hideBrokenImage} />}</span><span className="avatar-edit-badge"><Plus size={13} /></span></button><input ref={avatarInput} className="visually-hidden-file" type="file" accept="image/*" onChange={(event) => handleAvatar(event.target.files?.[0])} /><div><p className="modal-overline">МОЙ PULSE</p><h2>{user.name}<span>.</span></h2><span className="profile-email">{user.email}</span></div></div><p className="avatar-hint">Нажмите на аватар, чтобы выбрать фото из галереи</p><div className="profile-form"><label className="input-label">Ваше имя<input className="text-[16px]" value={name} onChange={(event) => setName(event.target.value)} /></label><label className="input-label">Родной город<div className="select-wrap"><Navigation size={15} /><select className="text-[16px]" value={city} onChange={(event) => setCity(event.target.value)}><option>Орск</option><option>Москва</option><option>Санкт-Петербург</option><option>Екатеринбург</option><option>Казань</option></select><ChevronDown size={14} /></div></label><label className="input-label">О себе<textarea className="text-[16px]" value={bio} onChange={(event) => setBio(event.target.value)} maxLength={240} placeholder="Коротко о себе" /></label><label className="input-label">Район города<input className="text-[16px]" value={neighborhood} onChange={(event) => setNeighborhood(event.target.value)} maxLength={120} placeholder="Например, 2-й микрорайон" /></label><button className="setting-toggle" onClick={() => setNotifications((value) => !value)}><span><Bell size={16} /><span><strong>Уведомления рядом</strong><small>Получать важные сигналы в вашем городе</small></span></span><i className={notifications ? 'on' : ''}><b /></i></button></div>{error && <p className="form-error">{error}</p>}<div className="profile-actions">{user.role === 'admin' && <button className="text-action" onClick={onAdminOpen}>Открыть модерацию</button>}<button className="logout-action" onClick={() => { void logout(); onClose() }}><LogOut size={15} /> Выйти</button><button className="primary-action compact" disabled={saving} onClick={() => { void save() }}>{saving ? 'Сохраняем…' : 'Сохранить'} <Check size={15} /></button></div></div></ModalFrame>
+  return <ModalFrame onClose={onClose}><div className="profile-modal"><div className="profile-modal-header"><button className="profile-avatar-button" onClick={() => avatarInput.current?.click()} aria-label="Изменить аватар"><span className="large-avatar"><span>{initials(user.name)}</span>{avatarPreview && <img src={avatarPreview} alt="Аватар" onError={hideBrokenImage} />}</span><span className="avatar-edit-badge"><Plus size={13} /></span></button><input ref={avatarInput} className="visually-hidden-file" type="file" accept="image/*" onChange={(event) => handleAvatar(event.target.files?.[0])} /><div><p className="modal-overline">МОЙ PULSE</p><h2>{user.name}<span>.</span></h2><span className="profile-email">{user.email}</span></div></div><p className="avatar-hint">Нажмите на аватар, чтобы выбрать фото из галереи</p><div className="profile-form"><label className="input-label">Ваше имя<input value={name} onChange={(event) => setName(event.target.value)} /></label><label className="input-label">Родной город<div className="select-wrap"><Navigation size={15} /><select value={city} onChange={(event) => setCity(event.target.value)}><option>Орск</option><option>Москва</option><option>Санкт-Петербург</option><option>Екатеринбург</option><option>Казань</option></select><ChevronDown size={14} /></div></label><label className="input-label">О себе<textarea value={bio} onChange={(event) => setBio(event.target.value)} maxLength={240} placeholder="Коротко о себе" /></label><label className="input-label">Район города<input value={neighborhood} onChange={(event) => setNeighborhood(event.target.value)} maxLength={120} placeholder="Например, 2-й микрорайон" /></label><button className="setting-toggle" onClick={() => setNotifications((value) => !value)}><span><Bell size={16} /><span><strong>Уведомления рядом</strong><small>Получать важные сигналы в вашем городе</small></span></span><i className={notifications ? 'on' : ''}><b /></i></button></div>{error && <p className="form-error">{error}</p>}<div className="profile-actions">{user.role === 'admin' && <button className="text-action" onClick={onAdminOpen}>Открыть модерацию</button>}<button className="logout-action" onClick={() => { void logout(); onClose() }}><LogOut size={15} /> Выйти</button><button className="primary-action compact" disabled={saving} onClick={() => { void save() }}>{saving ? 'Сохраняем…' : 'Сохранить'} <Check size={15} /></button></div></div></ModalFrame>
   }
 
 function MessagesPanel({ recipient, onClose, onNotify }: { recipient: { id: string; name: string }; onClose: () => void; onNotify: (message: string, tone?: Toast['tone']) => void }) {
@@ -432,10 +462,10 @@ function MessagesPanel({ recipient, onClose, onNotify }: { recipient: { id: stri
   const [body, setBody] = useState('')
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
-  const load = async () => { setLoading(true); try { setMessages(await fetchDirectMessages(recipient.id)) } catch { onNotify('Сообщения пока недоступны. Примените migration для direct messages.', 'error') } finally { setLoading(false) } }
+  const load = async () => { setLoading(true); try { setMessages(await fetchDirectMessages(recipient.id)) } catch (error) { const kind = apiErrorKind(error); onNotify(kind === 'auth' ? 'Войдите, чтобы читать сообщения' : kind === 'missing-rpc' ? 'Бэкенд не обновлён: примените миграции supabase/migrations' : 'Сообщения пока недоступны. Попробуйте позже.', 'error') } finally { setLoading(false) } }
   useEffect(() => { void load() }, [recipient.id])
   const submit = async () => { const value = body.trim(); if (!value || sending || !user || user.isAnonymous) return; setSending(true); try { const message = await sendDirectMessage(recipient.id, value); setMessages((current) => [...current, message]); setBody('') } catch { onNotify('Не удалось отправить сообщение. Попробуйте позже.', 'error') } finally { setSending(false) } }
-  return <motion.aside className="notifications-panel messages-panel glass-panel" initial={{ x: 26, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 26, opacity: 0 }} transition={spring}><div className="panel-header"><div><p className="modal-overline">PULSE / DIRECT</p><h2>{recipient.name}</h2></div><button className="sheet-close" onClick={onClose} aria-label="Закрыть сообщения"><X size={17} /></button></div><div className="messages-list">{loading ? <p className="panel-empty">Загружаем переписку…</p> : messages.length === 0 ? <p className="panel-empty">Начните диалог с автором сигнала.</p> : messages.map((message) => <div className={`message-bubble ${message.senderId === user?.id ? 'outgoing' : 'incoming'}`} key={message.id}>{message.body}</div>)}</div><form className="message-compose" onSubmit={(event) => { event.preventDefault(); void submit() }}><input className="text-[16px]" value={body} onChange={(event) => setBody(event.target.value)} placeholder="Написать сообщение…" maxLength={1000} aria-label="Сообщение" /><button type="submit" disabled={!body.trim() || sending} aria-label="Отправить сообщение"><Send size={15} /></button></form></motion.aside>
+  return <motion.aside className="notifications-panel messages-panel glass-panel" initial={{ x: 26, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 26, opacity: 0 }} transition={spring}><div className="panel-header"><div><p className="modal-overline">PULSE / DIRECT</p><h2>{recipient.name}</h2></div><button className="sheet-close" onClick={onClose} aria-label="Закрыть сообщения"><X size={17} /></button></div><div className="messages-list">{loading ? <p className="panel-empty">Загружаем переписку…</p> : messages.length === 0 ? <p className="panel-empty">Начните диалог с автором сигнала.</p> : messages.map((message) => <div className={`message-bubble ${message.senderId === user?.id ? 'outgoing' : 'incoming'}`} key={message.id}>{message.body}</div>)}</div><form className="message-compose" onSubmit={(event) => { event.preventDefault(); void submit() }}><input value={body} onChange={(event) => setBody(event.target.value)} placeholder="Написать сообщение…" maxLength={1000} aria-label="Сообщение" /><button type="submit" disabled={!body.trim() || sending} aria-label="Отправить сообщение"><Send size={15} /></button></form></motion.aside>
 }
 
 function AdminPanel({ events, onClose, onNotify }: { events: RadarEvent[]; onClose: () => void; onNotify: (message: string, tone?: Toast['tone']) => void }) {
@@ -443,11 +473,11 @@ function AdminPanel({ events, onClose, onNotify }: { events: RadarEvent[]; onClo
   const [loading, setLoading] = useState(true)
   const load = async () => {
     setLoading(true)
-    try { setReports(await fetchOpenReports()) } catch { onNotify('Модерация пока недоступна. Примените migration для ролей.', 'error') } finally { setLoading(false) }
+    try { setReports(await fetchOpenReports()) } catch (error) { onNotify(apiErrorKind(error) === 'missing-rpc' ? 'Модерация недоступна: примените миграцию 20260821_fix_admin_list_open_reports.sql' : 'Модерация пока недоступна. Попробуйте позже.', 'error') } finally { setLoading(false) }
   }
   useEffect(() => { void load() }, [])
   const moderate = async (eventId: string, status: 'published' | 'hidden' | 'removed') => {
-    try { await setEventModerationStatus(eventId, status); onNotify(status === 'published' ? 'Сигнал возвращён на карту' : 'Сигнал скрыт'); await load() } catch { onNotify('Не удалось обновить статус сигнала', 'error') }
+    try { await setEventModerationStatus(eventId, status); onNotify(status === 'published' ? 'Сигнал возвращён на карту' : 'Сигнал скрыт'); await load() } catch (error) { const kind = apiErrorKind(error); onNotify(kind === 'admin' ? 'Только администратор может модерировать сигналы' : kind === 'missing-rpc' ? 'Бэкенд не обновлён: примените миграции supabase/migrations' : 'Не удалось обновить статус сигнала', 'error') }
   }
   return <motion.aside className="notifications-panel admin-panel glass-panel" initial={{ x: 26, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 26, opacity: 0 }} transition={spring}><div className="panel-header"><div><p className="modal-overline">PULSE / MODERATION</p><h2>Модерация</h2></div><button className="sheet-close" onClick={onClose} aria-label="Закрыть модерацию"><X size={17} /></button></div>{loading ? <p className="panel-empty">Загружаем обращения…</p> : reports.length === 0 ? <p className="panel-empty">Открытых обращений нет.</p> : reports.map((report) => { const event = events.find((item) => item.id === report.eventId); return <div className="notification-row" key={report.id}><span className="notification-icon amber"><ShieldCheck size={15} /></span><div><strong>{event?.title ?? 'Сигнал на проверке'}</strong><p>{report.reason}</p><small>{event?.location ?? 'Адрес скрыт'}</small><div className="admin-actions"><button onClick={() => { void moderate(report.eventId, 'hidden') }}>Скрыть</button><button onClick={() => { void moderate(report.eventId, 'removed') }}>Удалить</button><button onClick={() => { void moderate(report.eventId, 'published') }}>Оставить</button></div></div></div> })}</motion.aside>
 }
@@ -457,7 +487,7 @@ function PulseAiPanel({ events, onClose }: { events: RadarEvent[]; onClose: () =
   const [question, setQuestion] = useState('')
   const summary = events.length === 0 ? 'На районе сейчас спокойно. Новых сигналов в видимой области пока нет — самое время добавить наблюдение.' : `В видимой области ${events.length} ${events.length === 1 ? 'сигнал' : 'сигналов'}. ${events.filter((event) => event.kind === 'help').length ? 'Есть соседские предложения помощи.' : 'Бартерных предложений пока не видно.'} Последнее обновление — только что.`
   useEffect(() => { setTyped(''); let index = 0; const timer = window.setInterval(() => { index += 1; setTyped(summary.slice(0, index)); if (index >= summary.length) window.clearInterval(timer) }, 18); return () => window.clearInterval(timer) }, [summary])
-  return <motion.aside className="ai-panel glass-panel" initial={{ opacity: 0, y: 18, scale: .98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 14, scale: .98 }} transition={spring}><div className="ai-panel-head"><div><span className="ai-kicker"><Bot size={14} /> PULSE AI</span><h2>Что происходит рядом?</h2></div><button className="sheet-close" onClick={onClose} aria-label="Закрыть AI"><X size={17} /></button></div><div className="ai-message"><span className="ai-message-avatar"><Sparkles size={15} /></span><p>{typed}<span className="typing-cursor">▍</span></p></div><div className="ai-suggestions"><button onClick={() => setQuestion('Где сейчас спокойнее?')}>Где спокойнее?</button><button onClick={() => setQuestion('Есть ли помощь рядом?')}>Помощь рядом</button></div><div className="ai-input"><input className="text-[16px]" value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="Спросить про район…" onKeyDown={(event) => { if (event.key === 'Enter' && question.trim()) setQuestion('Пока я умею только читать карту — скоро подключу полный AI-ответ.') }} /><button onClick={() => { if (question.trim()) setQuestion('Пока я умею только читать карту — скоро подключу полный AI-ответ.') }} aria-label="Отправить"><Send size={15} /></button></div></motion.aside>
+  return <motion.aside className="ai-panel glass-panel" initial={{ opacity: 0, y: 18, scale: .98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 14, scale: .98 }} transition={spring}><div className="ai-panel-head"><div><span className="ai-kicker"><Bot size={14} /> PULSE AI</span><h2>Что происходит рядом?</h2></div><button className="sheet-close" onClick={onClose} aria-label="Закрыть AI"><X size={17} /></button></div><div className="ai-message"><span className="ai-message-avatar"><Sparkles size={15} /></span><p>{typed}<span className="typing-cursor">▍</span></p></div><div className="ai-suggestions"><button onClick={() => setQuestion('Где сейчас спокойнее?')}>Где спокойнее?</button><button onClick={() => setQuestion('Есть ли помощь рядом?')}>Помощь рядом</button></div><div className="ai-input"><input value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="Спросить про район…" onKeyDown={(event) => { if (event.key === 'Enter' && question.trim()) setQuestion('Пока я умею только читать карту — скоро подключу полный AI-ответ.') }} /><button onClick={() => { if (question.trim()) setQuestion('Пока я умею только читать карту — скоро подключу полный AI-ответ.') }} aria-label="Отправить"><Send size={15} /></button></div></motion.aside>
 }
 
 function NotificationsPanel({ onClose }: { onClose: () => void }) {

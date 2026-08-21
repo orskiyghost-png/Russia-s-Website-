@@ -43,14 +43,14 @@ GitHub-репозиторий проекта:
 |---|---|
 | `src/App.tsx` | Главный компонент приложения, layout, фильтры, панели, модальные окна и взаимодействия |
 | `src/CityMap.tsx` | Leaflet-карта, маркеры, popups, геолокация и обработка кликов по карте |
-| `src/auth.tsx` | React Auth Context, Supabase session, Email OTP, профиль и logout |
+| `src/auth.tsx` | React Auth Context, Supabase session, Email + Password, профиль и logout |
 | `src/data.ts` | Конфигурация слоёв, загрузка событий, Realtime-подписка и RPC `create_event` |
 | `src/lib/supabase.ts` | Создание Supabase client и проверка env-переменных |
 | `src/theme.tsx` | Переключение светлой/тёмной темы |
 | `src/index.css` | Глобальные стили, responsive layout, glass UI, mobile overrides и animation styles |
 | `src/types.ts` | Типы `RadarEvent`, `AuthUser`, `EventKind`, `Layer` |
 | `supabase/schema.sql` | Production SQL-схема таблиц, RLS, trigger, RPC и Realtime |
-| `docs/supabase-setup.md` | Инструкция настройки Supabase и Email OTP |
+| `docs/supabase-setup.md` | Инструкция настройки Supabase, Email + Password и Turnstile |
 | `.env.example` | Шаблон переменных окружения без секретов |
 
 Стек из `package.json`:
@@ -182,57 +182,37 @@ create policy "Events are public"
 
 ---
 
-## 6. Авторизация Email OTP
+## 6. Авторизация Email + Password
 
-Несмотря на устаревшую формулировку в некоторых строках README о `email/password`, актуальная реализация проекта использует **Email OTP без пароля**.
+Актуальная реализация использует классическую связку **Email + Password** с защитой Cloudflare Turnstile. OTP и Magic Link не используются.
 
 В `src/auth.tsx` реализованы методы:
 
 ```ts
-supabase.auth.signInWithOtp({
-  email,
-  options: { shouldCreateUser: false },
-})
+supabase.auth.signInWithPassword({ email, password, options: captchaToken ? { captchaToken } : undefined })
 ```
 
 для входа и:
 
 ```ts
-supabase.auth.signInWithOtp({
+supabase.auth.signUp({
   email,
-  options: {
-    shouldCreateUser: true,
-    data: { name },
-  },
+  password,
+  options: { ...(captchaToken ? { captchaToken } : {}), data: { name } },
 })
 ```
 
 для регистрации.
 
-Подтверждение кода:
-
-```ts
-supabase.auth.verifyOtp({
-  email,
-  token,
-  type: 'email',
-})
-```
-
-UI ожидает ровно шесть цифр. В `AuthModal` есть шесть отдельных OTP-ячеек с автоматическим переходом фокуса между ними, обработкой Backspace, очисткой при ошибке и повторной отправкой после cooldown.
-
 Жизненный цикл авторизации:
 
-1. Пользователь открывает форму входа или регистрации.
-2. Вводит email, а при регистрации также имя.
-3. Supabase отправляет одноразовый код.
-4. Пользователь вводит шесть цифр.
-5. `verifyOtp` создаёт сессию.
-6. `onAuthStateChange` и `getSession` обновляют React Auth Context.
-7. `hydrateUser` загружает профиль из `public.profiles`.
-8. После первого пользователя trigger `handle_new_user` автоматически создаёт профиль.
+1. Пользователь открывает форму входа или регистрации и вводит email (а при регистрации также имя) и пароль.
+2. `signInWithPassword` / `signUp` создаёт сессию (в Supabase должен быть отключён Confirm email, иначе после регистрации сессия не создаётся).
+3. `onAuthStateChange` и `getSession` обновляют React Auth Context.
+4. `hydrateUser` загружает профиль из `public.profiles`.
+5. После первого пользователя trigger `handle_new_user` автоматически создаёт профиль.
 
-В Supabase необходимо включить Email provider, разрешить регистрацию при необходимости и настроить Email Template так, чтобы в письме отображался `{{ .Token }}`, а не только Magic Link.
+Turnstile: публичный site key передаётся через `VITE_TURNSTILE_SITE_KEY` и отправляется в Supabase через `options.captchaToken`. Secret Key хранится только в Supabase Dashboard (Bot and Abuse Protection). На клиенте капча не блокирует отправку: если виджет не выдал токен, сервер сам решает, принимать ли запрос.
 
 ---
 
@@ -432,7 +412,7 @@ Production build создаётся корректно. Vite выдаёт тол
 2. Реакции и комментарии отображаются в модели события, но полноценная запись реакций/комментариев ещё не реализована.
 3. PULSE AI пока является UI-панелью с локальным summary по событиям. Полноценный LLM backend ещё не подключён.
 4. Поиск использует публичный Nominatim endpoint и не имеет собственного proxy/rate limiter.
-5. В README всё ещё встречается устаревшее описание `email/password`; фактическая реализация использует Email OTP. Если будешь редактировать документацию, приведи README и `docs/supabase-setup.md` к единой OTP-терминологии.
+5. Документация приведена к единой терминологии: авторизация — Email + Password с Turnstile, OTP и Magic Link не используются.
 6. Trigger `handle_new_user` использует local-part email как fallback имени. При дальнейшем улучшении стоит гарантировать, что fallback всегда удовлетворяет check constraint имени от 2 символов.
 7. Нужно отдельно проверить production preview визуально на реальном мобильном viewport после публикации.
 8. Не коммить `.env.local`, service-role key, session tokens или пользовательские данные.
@@ -468,7 +448,7 @@ git log -1 --oneline
 
 ## 15. Короткая задача для следующей нейросети
 
-> Продолжи разработку PULSE как Senior Full-Stack Engineer. Сначала прочитай этот handoff и проверь фактический код в репозитории. Не переписывай уже работающие Supabase Auth, RPC и Realtime без необходимости. Главные инварианты: Email OTP на 6 цифр, события создаются только через `create_event()`, RLS включён, `public.events` синхронизируется через Realtime, карта Leaflet читаема в обеих темах, мобильное меню действительно закрывается, auth modal центрирован, все поля имеют минимум 16 px. Перед любым push выполни typecheck, production build и `git diff --check`.
+> Продолжи разработку PULSE как Senior Full-Stack Engineer. Сначала прочитай этот handoff и проверь фактический код в репозитории. Не переписывай уже работающие Supabase Auth, RPC и Realtime без необходимости. Главные инварианты: Email + Password с Turnstile, события создаются только через `create_event()`, RLS включён, `public.events` синхронизируется через Realtime, карта Leaflet читаема в обеих темах, мобильное меню действительно закрывается, auth modal центрирован, все поля имеют минимум 16 px. Перед любым push выполни typecheck, production build и `git diff --check`.
 
 ---
 

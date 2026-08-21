@@ -191,3 +191,13 @@ export function relativeTime(timestamp: number) {
   const hours = Math.floor(minutes / 60)
   return `${hours} ч назад`
 }
+
+export function apiErrorKind(error: unknown): 'auth' | 'admin' | 'rate-limit' | 'missing-rpc' | 'other' {
+  const message = error instanceof Error ? error.message : String(error)
+  const lowered = message.toLowerCase()
+  if (message.includes('AUTH_REQUIRED') || message.includes('PERMANENT_ACCOUNT_REQUIRED')) return 'auth'
+  if (message.includes('ADMIN_REQUIRED')) return 'admin'
+  if (message.includes('RATE_LIMIT') || message.includes('COMMENT_RATE_LIMIT')) return 'rate-limit'
+  if (lowered.includes('could not find the function') || (lowered.includes('function') && lowered.includes('does not exist'))) return 'missing-rpc'
+  return 'other'
+}

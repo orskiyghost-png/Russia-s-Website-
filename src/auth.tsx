@@ -10,7 +10,6 @@ type AuthContextValue = {
   configured: boolean
   login: (email: string, password: string, captchaToken: string) => Promise<AuthResult>
   register: (name: string, email: string, password: string, captchaToken: string) => Promise<AuthResult>
-  signInAnonymously: () => Promise<AuthResult>
   updateProfile: (updates: Partial<Pick<AuthUser, 'name' | 'city' | 'bio' | 'neighborhood' | 'notifications' | 'avatarUrl'>>) => Promise<string | null>
   logout: () => Promise<void>
 }
@@ -77,11 +76,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (error) return { error: translateAuthError(error.message) }
       if (!data.session) return { error: 'Аккаунт создан, но Supabase всё ещё требует подтверждение email. Отключите Confirm email в Auth Settings.' }
       return { error: null }
-    },
-    signInAnonymously: async () => {
-      if (!isSupabaseConfigured) return { error: 'Supabase не настроен' }
-      const { error } = await supabase.auth.signInAnonymously()
-      return { error: error ? translateAuthError(error.message) : null }
     },
     updateProfile: async (updates) => {
       if (!user || user.isAnonymous) return 'Постоянный аккаунт нужен для сохранения профиля'
