@@ -56,17 +56,18 @@ export function Captcha({ onToken, onError }: { onToken: (token: string) => void
             // Автоматическая попытка восстановления виджета, затем понятное сообщение (без бесконечного цикла).
             if (retry < 2) {
               retryTimer = window.setTimeout(() => setRetry((value) => value + 1), 1600)
-              onError?.('Не удалось загрузить проверку. Пробуем ещё раз…')
             } else {
-              onError?.('Проверка CAPTCHA временно недоступна. Обновите страницу и попробуйте ещё раз.')
+              // Убираем виджет, чтобы скрыть встроенную ошибку Cloudflare, и оставляем спокойную заметку.
+              hostRef.current?.replaceChildren()
+              onError?.('Проверка не загрузилась в вашей сети. Это не блокирует вход и публикацию.')
             }
           },
         })
       } catch {
         onToken('')
-        onError?.('Не удалось отобразить CAPTCHA. Проверьте, что Site Key настроен правильно.')
+        onError?.('Проверка не загрузилась. Это не блокирует вход и публикацию.')
       }
-    }).catch(() => onError?.('Не удалось загрузить CAPTCHA. Проверьте подключение к интернету.'))
+    }).catch(() => onError?.('Проверка не загрузилась в вашей сети. Это не блокирует вход и публикацию.'))
     return () => { cancelled = true; window.clearTimeout(retryTimer); widgetRef.current = null }
   }, [onError, onToken, retry, siteKey, theme])
 

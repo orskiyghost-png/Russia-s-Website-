@@ -101,7 +101,7 @@ function translateAuthError(message: string) {
   if (normalized.includes('invalid login credentials') || normalized.includes('invalid password') || normalized.includes('user not found')) return 'Неверный email или пароль'
   if (normalized.includes('already registered') || normalized.includes('user already exists')) return 'Аккаунт с этим email уже существует. Войдите во вкладке «Вход».'
   if (normalized.includes('password')) return 'Пароль должен содержать минимум 6 символов'
-  if (normalized.includes('captcha')) return 'CAPTCHA не пройдена. Выполните проверку ещё раз.'
+  if (normalized.includes('captcha')) return 'Сервер требует CAPTCHA, но проверка не работает в вашей сети. Отключите Bot and Abuse Protection в Supabase (Authentication → Bot and Abuse Protection), чтобы вход работал без неё.'
   if (normalized.includes('signup') && normalized.includes('disabled')) return 'Регистрация отключена в настройках Supabase'
   if (normalized.includes('email')) return 'Проверьте email и повторите попытку'
   if (normalized.includes('anonymous')) return 'Гостевой режим временно недоступен'

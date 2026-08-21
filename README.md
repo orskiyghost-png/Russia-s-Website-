@@ -38,7 +38,7 @@ PULSE — гиперлокальная карта городских сигна�
    - `VITE_SUPABASE_ANON_KEY`
    - `VITE_TURNSTILE_SITE_KEY`
 2. Выполните в Supabase SQL Editor: `supabase/schema.sql`, затем `supabase/migrations/0001_social_features.sql`.
-3. Настройте авторизацию: **Authentication → Providers → Email** (включить, разрешить регистрацию, отключить Confirm email), **URL Configuration** (Site URL / Redirect URL продакшена) и **Bot and Abuse Protection → Cloudflare Turnstile** (вставьте Secret Key; публичный site key — в `VITE_TURNSTILE_SITE_KEY`).
+3. Настройте авторизацию: **Authentication → Providers → Email** (включить, разрешить регистрацию, отключить Confirm email), **URL Configuration** (Site URL / Redirect URL продакшена). **Bot and Abuse Protection** — опционально: включённая Turnstile-капча **блокирует вход**, если виджет недоступен в регионе пользователя (например, в РФ `challenges.cloudflare.com` не открывается). Если виджет не работает — оставьте защиту выключенной, антиспам уже есть в RPC-функциях.
 
 Service-role key и Turnstile Secret Key не нужны фронтенду и не должны попадать в `VITE_` переменные.
 
