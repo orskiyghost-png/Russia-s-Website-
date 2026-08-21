@@ -34,8 +34,7 @@ jobs:
           VITE_SUPABASE_URL: https://vavixbintoqoivnswdwe.supabase.co
           VITE_SUPABASE_ANON_KEY: sb_publishable_J_swRh7VMA2JlUZcPlMqHQ_6yTnxfGh
           VITE_TURNSTILE_SITE_KEY: 0x4AAAAAAEW62-EI-NEVzD6h
-          # Заполните site key из hCaptcha, когда аккаунт будет создан (виджет переключится на hCaptcha автоматически).
-          VITE_HCAPTCHA_SITE_KEY: ''
+          VITE_HCAPTCHA_SITE_KEY: 7586ffe6-f218-4190-8956-91ce7b16fb1c
       - name: Add SPA fallback
         run: cp dist/index.html dist/404.html
       - name: Upload Pages artifact
