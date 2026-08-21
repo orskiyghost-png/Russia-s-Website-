@@ -3,7 +3,7 @@ import { AttributionControl, MapContainer, Marker, Popup, TileLayer, useMap, use
 import L, { type LatLngExpression } from 'leaflet'
 import { Crosshair } from 'lucide-react'
 import type { RadarEvent } from './types'
-import { kindConfig } from './data'
+import { avatarColor, kindConfig } from './data'
 import type { Theme } from './theme'
 
 type CityMapProps = {
@@ -81,7 +81,8 @@ function escapeAttribute(value: string) {
 function markerIcon(event: RadarEvent, selected: boolean) {
   const { color } = kindConfig[event.kind]
   const safeAvatar = event.avatarUrl ? escapeAttribute(event.avatarUrl) : ''
-  const avatar = `<span class="pulse-marker-fallback">${escapeAttribute(initials(event.userName))}</span>${safeAvatar ? `<img class="pulse-marker-avatar" src="${safeAvatar}" alt="" loading="lazy" onerror="this.remove()" />` : ''}`
+  const fallbackColor = avatarColor(event.userName)
+  const avatar = `<span class="pulse-marker-fallback" style="background:${fallbackColor}">${escapeAttribute(initials(event.userName))}</span>${safeAvatar ? `<img class="pulse-marker-avatar" src="${safeAvatar}" alt="" loading="lazy" onerror="this.remove()" />` : ''}`
   const size = selected ? 44 : 34
   return L.divIcon({
     className: 'pulse-leaflet-marker-wrapper',
@@ -106,7 +107,7 @@ const EventMarker = memo(function EventMarker({ event, selectedId, onSelect }: {
   const selected = event.id === selectedId
   const icon = useMemo(() => markerIcon(event, selected), [event, selected])
   const handlers = useMemo(() => ({ click: () => onSelect(event) }), [event, onSelect])
-  return <Marker position={[event.lat, event.lng]} icon={icon} eventHandlers={handlers}><Popup closeButton={false} className="pulse-popup"><strong>{event.title}</strong><span>{event.userName} · {event.location}</span></Popup></Marker>
+  return <Marker position={[event.lat, event.lng]} icon={icon} eventHandlers={handlers}><Popup closeButton={false} className="pulse-popup"><strong>{event.title}</strong><span className="pulse-popup-user"><span className="pulse-popup-avatar" style={{ background: avatarColor(event.userName) }}>{initials(event.userName)}</span>{event.avatarUrl && <img className="pulse-popup-avatar" src={event.avatarUrl} alt="" loading="lazy" onError={(imageEvent) => { imageEvent.currentTarget.style.display = 'none' }} />}<span>{event.userName} · {event.location}</span></span></Popup></Marker>
 })
 
 function ClusterMarker({ events, onSelect }: { events: RadarEvent[]; onSelect: (event: RadarEvent) => void }) {

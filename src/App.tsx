@@ -37,7 +37,7 @@ import { useAuth } from './auth'
 import { Captcha } from './Captcha'
 import { useTheme } from './theme'
 
-import { DEFAULT_CENTER, addComment, apiErrorKind, createEvent as createServerEvent, eventLayer, fetchComments, fetchDirectMessages, fetchEvents, fetchOpenReports, kindConfig, layerConfig, relativeTime, reportEvent, reverseGeocode, sendDirectMessage, setEventModerationStatus, subscribeToEvents, toggleReaction } from './data'
+import { DEFAULT_CENTER, addComment, apiErrorKind, avatarColor, createEvent as createServerEvent, eventLayer, fetchComments, fetchDirectMessages, fetchEvents, fetchOpenReports, kindConfig, layerConfig, relativeTime, reportEvent, reverseGeocode, sendDirectMessage, setEventAddress, setEventModerationStatus, subscribeToEvents, toggleReaction } from './data'
 
 import type { EventKind, EventComment, Layer, RadarEvent } from './types'
 
@@ -48,7 +48,15 @@ const humanLocation = (value: string) => /^-?\d+\.\d+,\s*-?\d+\.\d+$/.test(value
 function hideBrokenImage(event: SyntheticEvent<HTMLImageElement>) {
   event.currentTarget.style.display = 'none'
 }
-const SEARCH_FALLBACKS: Record<string, [number, number]> = { орск: [51.2049, 58.5668], москва: [55.7558, 37.6173], казань: [55.7879, 49.1233], екатеринбург: [56.8389, 60.6057], 'санкт-петербург': [59.9343, 30.3351] }
+type SearchResult = { id: string; title: string; subtitle: string; lat: number; lng: number }
+
+const SEARCH_FALLBACKS: SearchResult[] = [
+  { id: 'orsk', title: 'Орск', subtitle: 'Оренбургская область · Россия', lat: 51.2049, lng: 58.5668 },
+  { id: 'moscow', title: 'Москва', subtitle: 'Москва · Россия', lat: 55.7558, lng: 37.6173 },
+  { id: 'kazan', title: 'Казань', subtitle: 'Республика Татарстан · Россия', lat: 55.7879, lng: 49.1233 },
+  { id: 'yekaterinburg', title: 'Екатеринбург', subtitle: 'Свердловская область · Россия', lat: 56.8389, lng: 60.6057 },
+  { id: 'spb', title: 'Санкт-Петербург', subtitle: 'Санкт-Петербург · Россия', lat: 59.9343, lng: 30.3351 },
+]
 
 type Toast = { message: string; tone?: 'error' | 'success' }
 
@@ -59,11 +67,12 @@ function App() {
   const [eventsLoading, setEventsLoading] = useState(true)
   const [savingEvent, setSavingEvent] = useState(false)
   const [center, setCenter] = useState<[number, number]>(DEFAULT_CENTER)
+  const [cityLabel, setCityLabel] = useState('ОРСК')
   const [selectedEvent, setSelectedEvent] = useState<RadarEvent | null>(null)
   const [activeLayer, setActiveLayer] = useState<Layer>('all')
   const [query, setQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([])
   const [searching, setSearching] = useState(false)
-  const [searchMessage, setSearchMessage] = useState('')
   const [pendingCoords, setPendingCoords] = useState<{ lat: number; lng: number } | null>(null)
   const [isReportOpen, setIsReportOpen] = useState(false)
   const [isAuthOpen, setIsAuthOpen] = useState(false)
@@ -79,14 +88,7 @@ function App() {
   const searchInputRef = useRef<HTMLInputElement | null>(null)
   const toastTimer = useRef<number | undefined>(undefined)
 
-  const filteredEvents = useMemo(() => {
-    const normalized = query.trim().toLowerCase()
-    return events.filter((event) => {
-      const matchesLayer = activeLayer === 'all' || eventLayer(event.category) === activeLayer
-      const matchesQuery = !normalized || `${event.title} ${event.description} ${event.location} ${event.category}`.toLowerCase().includes(normalized)
-      return matchesLayer && matchesQuery
-    })
-  }, [activeLayer, events, query])
+  const filteredEvents = useMemo(() => events.filter((event) => activeLayer === 'all' || eventLayer(event.category) === activeLayer), [activeLayer, events])
 
   const notify = useCallback((message: string, tone: Toast['tone'] = 'success') => {
     setToast({ message, tone })
@@ -144,20 +146,24 @@ function App() {
     }
   }
 
-  const commentOnEvent = async (event: RadarEvent, text: string) => {
-    if (!user || user.isAnonymous) { requirePermanentAccount(); return }
-    if (event.id.startsWith('orsk-')) { notify('Это демо-событие. Подключите Supabase в Settings → Environment, чтобы писать комментарии.', 'error'); return }
+  const commentOnEvent = async (event: RadarEvent, text: string): Promise<boolean> => {
+    const value = text.trim()
+    if (!user || user.isAnonymous) { requirePermanentAccount(); return false }
+    if (value.length < 1 || value.length > 500) { notify('Комментарий должен быть от 1 до 500 символов', 'error'); return false }
+    if (event.id.startsWith('orsk-')) { notify('Это демо-событие. Подключите Supabase в Settings → Environment, чтобы писать комментарии.', 'error'); return false }
     try {
-      const result = await addComment(event.id, text)
+      const result = await addComment(event.id, value)
       const next = { ...event, comments: result.comments, commentsList: [...(event.commentsList ?? []), result.comment] }
       setEvents((current) => current.map((item) => item.id === event.id ? { ...item, comments: result.comments } : item))
       setSelectedEvent((current) => current?.id === event.id ? next : current)
       notify('Комментарий опубликован')
+      return true
     } catch (error) {
       const kind = apiErrorKind(error)
-      if (kind === 'auth') { requirePermanentAccount(); return }
-      if (kind === 'missing-rpc') { notify('Бэкенд не обновлён: примените миграции supabase/migrations в SQL Editor', 'error'); return }
+      if (kind === 'auth') { requirePermanentAccount(); return false }
+      if (kind === 'missing-rpc') { notify('Бэкенд не обновлён: примените миграции supabase/migrations в SQL Editor', 'error'); return false }
       notify(kind === 'rate-limit' ? 'Комментарии временно ограничены. Попробуйте позже.' : 'Не удалось опубликовать комментарий. Попробуйте ещё раз.', 'error')
+      return false
     }
   }
 
@@ -183,56 +189,59 @@ function App() {
     return () => { active = false; unsubscribe() }
   }, [])
 
-  const searchCity = async () => {
+  useEffect(() => {
     const value = query.trim()
-    if (!value || searching) return
-    setSearching(true)
-    setSearchMessage('')
-    const fallback = SEARCH_FALLBACKS[value.toLowerCase()]
-    if (fallback) {
-      setCenter(fallback)
-      setSelectedEvent(null)
-      setQuery('')
-      setSearchMessage(value)
-      notify(`Карта центрирована: ${value}`)
+    if (value.length < 2) {
+      setSearchResults([])
       setSearching(false)
       return
     }
+    const localResults = SEARCH_FALLBACKS.filter((result) => `${result.title} ${result.subtitle}`.toLowerCase().includes(value.toLowerCase()))
+    setSearchResults(localResults)
+    setSearching(true)
     const controller = new AbortController()
-    const timeout = window.setTimeout(() => controller.abort(), 8000)
-    try {
-      const response = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&accept-language=ru&q=${encodeURIComponent(value)}`, { signal: controller.signal })
-      if (!response.ok) throw new Error('geocoding')
-      const places = await response.json() as Array<{ lat: string; lon: string; display_name: string }>
-      if (!places.length) {
-        setSearchMessage('Город не найден')
-        setQuery('')
-        notify('Город не найден', 'error')
-        return
-      }
-      const place = places[0]
-      setCenter([Number(place.lat), Number(place.lon)])
-      setQuery('')
-      setSearchMessage(place.display_name.split(',').slice(0, 2).join(', '))
-      setSelectedEvent(null)
-      notify('Карта перемещена к результату')
-    } catch {
-      setSearchMessage('Не удалось связаться с Nominatim')
-      setQuery('')
-      notify('Поиск временно недоступен. Попробуйте название города ещё раз.', 'error')
-    } finally {
-      window.clearTimeout(timeout)
-      setSearching(false)
-    }
+    let timedOut = false
+    const timeout = window.setTimeout(() => { timedOut = true; controller.abort() }, 8000)
+    const timer = window.setTimeout(() => {
+      void fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&addressdetails=1&accept-language=ru&q=${encodeURIComponent(value)}`, { signal: controller.signal, headers: { Accept: 'application/json' } })
+        .then((response) => { if (!response.ok) throw new Error('geocoding'); return response.json() as Promise<Array<{ place_id: number; name?: string; lat: string; lon: string; display_name: string; address?: { city?: string; town?: string; village?: string; municipality?: string; state?: string; country?: string } }>> })
+        .then((places) => {
+          const remoteResults = places.map((place) => {
+            const address = place.address ?? {}
+            const title = place.name?.trim() || address.city || address.town || address.village || address.municipality || place.display_name.split(',')[0]
+            const region = address.state || address.country || place.display_name.split(',').slice(1, 2)[0]?.trim() || 'Россия'
+            return { id: `nominatim-${place.place_id}`, title, subtitle: `${region} · ${address.country || 'Россия'}`, lat: Number(place.lat), lng: Number(place.lon) }
+          }).filter((result) => Number.isFinite(result.lat) && Number.isFinite(result.lng))
+          const seen = new Set(localResults.map((result) => `${result.title}:${result.lat.toFixed(3)}`))
+          const nextResults = [...localResults, ...remoteResults.filter((result) => !seen.has(`${result.title}:${result.lat.toFixed(3)}`))].slice(0, 6)
+          setSearchResults(nextResults)
+          if (nextResults.length === 0) notify('Город не найден. Карта осталась на прежнем месте.', 'error')
+        })
+        .catch(() => { if (!controller.signal.aborted || timedOut) notify('Поиск временно недоступен. Карта осталась на прежнем месте.', 'error') })
+        .finally(() => { window.clearTimeout(timeout); if (query.trim() === value) setSearching(false) })
+    }, 350)
+    return () => { window.clearTimeout(timer); window.clearTimeout(timeout); controller.abort() }
+  }, [query])
+
+  const selectSearchResult = useCallback((result: SearchResult) => {
+    setCenter([result.lat, result.lng])
+    setCityLabel(result.title.toUpperCase())
+    setSelectedEvent(null)
+    setSearchResults([])
+    setQuery('')
+    notify(`Карта центрирована: ${result.title}`)
+  }, [notify])
+
+  const searchCity = () => {
+    const firstResult = searchResults[0]
+    if (firstResult) selectSearchResult(firstResult)
+    else if (query.trim().length < 2) notify('Введите минимум 2 символа для поиска', 'error')
+    else notify('Дождитесь результатов поиска', 'error')
   }
 
   const toggleOrSubmitSearch = () => {
-    if (typeof window !== 'undefined' && window.matchMedia('(max-width: 700px)').matches && !isSearchOpen) {
-      setIsSearchOpen(true)
-      window.setTimeout(() => searchInputRef.current?.focus(), 0)
-      return
-    }
-    void searchCity()
+    if (searchResults[0]) searchCity()
+    else searchInputRef.current?.focus()
   }
 
   const openReportAt = useCallback((coords?: { lat: number; lng: number }) => {
@@ -268,16 +277,23 @@ function App() {
     const config = kindConfig[payload.kind]
     setSavingEvent(true)
     try {
-      let address: string | null = null
-      try {
-        address = await reverseGeocode(pendingCoords.lat, pendingCoords.lng)
-      } catch {
-        address = null
-      }
-      const newEvent = await createServerEvent({ ...payload, category: config.label, lat: pendingCoords.lat, lng: pendingCoords.lng, address })
+      // Persist the signal first through the only allowed write path: create_event.
+      // Address enrichment is deliberately best-effort and cannot block the marker.
+      const newEvent = await createServerEvent({ ...payload, category: config.label, lat: pendingCoords.lat, lng: pendingCoords.lng })
+      let visibleEvent = newEvent
       setEvents((current) => [newEvent, ...current])
+      try {
+        const address = await reverseGeocode(newEvent.lat, newEvent.lng)
+        if (address) {
+          await setEventAddress(newEvent.id, address)
+          visibleEvent = { ...newEvent, address, location: address }
+          setEvents((current) => current.map((event) => event.id === newEvent.id ? visibleEvent : event))
+        }
+      } catch {
+        // The event is already saved; coordinates remain a valid fallback location.
+      }
       setCenter([newEvent.lat, newEvent.lng])
-      setSelectedEvent(newEvent)
+      setSelectedEvent(visibleEvent)
       setIsReportOpen(false)
       setPendingCoords(null)
       notify('Событие опубликовано для всех жителей')
@@ -291,22 +307,22 @@ function App() {
 
   return <div className="pulse-app">
     <header className="pulse-header glass-panel">
-      <button className="pulse-logo" onClick={() => { setCenter(DEFAULT_CENTER); setSelectedEvent(null) }} aria-label="В центр карты">
+      <button className="pulse-logo" onClick={() => { setCenter(DEFAULT_CENTER); setCityLabel('ОРСК'); setSelectedEvent(null) }} aria-label="В центр карты">
         <span className="logo-orbit"><span /></span><span className="logo-word">PULSE<span>.</span></span>
       </button>
       <div className={`header-search-wrap ${isSearchOpen ? 'search-open' : ''}`}>
         <button className="search-submit" onClick={toggleOrSubmitSearch} aria-label="Искать"><Search size={16} /></button>
-        <input ref={searchInputRef} value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void searchCity(); else if (event.key === 'Escape') setIsSearchOpen(false) }} placeholder="Найти город или событие" aria-label="Поиск города" />
+        <input ref={searchInputRef} value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') searchCity(); else if (event.key === 'Escape') { setSearchResults([]); setQuery('') } }} placeholder="Найти город" aria-label="Поиск города" />
         {searching && <span className="search-status"><i className="search-spinner" /> ищем…</span>}
         <kbd>⌘ K</kbd>
-        {isSearchOpen && <button className="search-close" onClick={() => { setIsSearchOpen(false); setQuery(''); setSearchMessage('') }} aria-label="Закрыть поиск"><X size={14} /></button>}
-        {searchMessage && <span className="search-result-label">{searchMessage}</span>}
+        {(query || searchResults.length > 0) && <button className="search-close" onClick={() => { setIsSearchOpen(false); setQuery(''); setSearchResults([]) }} aria-label="Очистить поиск"><X size={14} /></button>}
+        {searchResults.length > 0 && <div className="search-results" role="listbox" aria-label="Результаты поиска">{searchResults.map((result, index) => <button key={result.id} className={`search-result ${index === 0 ? 'first' : ''}`} onClick={() => selectSearchResult(result)} role="option"><span className="search-result-pin"><MapPin size={14} /></span><span><strong>{result.title}</strong><small>{result.subtitle}</small></span></button>)}</div>}
       </div>
       <div className="header-actions">
         <span className="live-indicator"><i /> В эфире</span>
         <button className="header-icon-button theme-toggle" onClick={toggleTheme} aria-label={theme === 'light' ? 'Включить тёмную тему' : 'Включить светлую тему'} title={theme === 'light' ? 'Тёмная тема' : 'Светлая тема'}>{theme === 'light' ? <Moon size={17} /> : <Sun size={17} />}</button>
         <button className="header-icon-button notification-button" onClick={() => setIsNotificationsOpen(true)} aria-label="Уведомления"><Bell size={17} /><span className="unread-dot" /></button>
-        {user && !user.isAnonymous ? <button className="user-chip" onClick={() => setIsProfileOpen(true)}><span className="user-avatar"><span>{initials(user.name)}</span>{user.avatarUrl && <img src={user.avatarUrl} alt="" onError={hideBrokenImage} />}</span><span className="user-name">{user.name}</span><ChevronDown size={14} /></button> : user ? <button className="login-button guest-chip" onClick={() => setIsAuthOpen(true)}><UserRound size={15} /> Гость</button> : <button className="login-button" onClick={() => setIsAuthOpen(true)}><LogIn size={15} /> Войти</button>}
+        {user && !user.isAnonymous ? <button className="user-chip" onClick={() => setIsProfileOpen(true)}><span className="user-avatar"><span style={{ background: avatarColor(user.name) }}>{initials(user.name)}</span>{user.avatarUrl && <img src={user.avatarUrl} alt="" onError={hideBrokenImage} />}</span><span className="user-name">{user.name}</span><ChevronDown size={14} /></button> : user ? <button className="login-button guest-chip" onClick={() => setIsAuthOpen(true)}><UserRound size={15} /> Гость</button> : <button className="login-button" onClick={() => setIsAuthOpen(true)}><LogIn size={15} /> Войти</button>}
         <button className="mobile-menu-button header-icon-button" onClick={() => setIsMenuOpen((value) => !value)} aria-label="Открыть меню"><Menu size={18} /></button>
       </div>
     </header>
@@ -327,11 +343,11 @@ function App() {
       {(eventsLoading || searching || authLoading) && <MapSkeleton label={searching ? 'Ищем город…' : 'Обновляем события…'} />}
       <div className="map-vignette" />
       <div className="map-title-wash" aria-hidden="true" />
-      <div className="map-title-block"><p>ОРСК · ОБНОВЛЕНО ТОЛЬКО ЧТО</p><h1>Город в реальном <em>времени</em></h1><span><Users size={13} /> {events.length} сигналов в радиусе 2 км</span></div>
+      <div className="map-title-block"><p>{cityLabel} · ОБНОВЛЕНО ТОЛЬКО ЧТО</p><h1>Город в реальном <em>времени</em></h1><span><Users size={13} /> {events.length} сигналов в радиусе 2 км</span></div>
       <div className="map-controls glass-panel"><LocateMeButton onLocated={(location) => { setCenter(location); notify('Карта центрирована на вас') }} onError={(message) => notify(message, 'error')} /><button className="map-floating-control" onClick={() => setCenter(DEFAULT_CENTER)} title="Вернуться к Орску" aria-label="Вернуться к Орску"><Navigation size={16} /></button></div>
       {!selectedEvent && <button className="ai-fab glass-panel" onClick={() => setIsAiOpen((value) => !value)} aria-label="Открыть PULSE AI"><Bot size={18} /><span>PULSE AI</span></button>}
 
-      <AnimatePresence>{selectedEvent && <EventSheet event={selectedEvent} canInteract={Boolean(user && !user.isAnonymous)} canReport={Boolean(user && !user.isAnonymous)} canMessage={Boolean(user && !user.isAnonymous && selectedEvent.userId)} onRequireAuth={requirePermanentAccount} onClose={() => setSelectedEvent(null)} onReact={() => { void reactToEvent(selectedEvent) }} onComment={(text) => { void commentOnEvent(selectedEvent, text) }} onReport={(reason) => { void reportEventFromSheet(selectedEvent, reason) }} onMessage={() => openMessagesFor(selectedEvent)} />}</AnimatePresence>
+      <AnimatePresence>{selectedEvent && <EventSheet event={selectedEvent} canInteract={Boolean(user && !user.isAnonymous)} canReport={Boolean(user && !user.isAnonymous)} canMessage={Boolean(user && !user.isAnonymous && selectedEvent.userId)} onRequireAuth={requirePermanentAccount} onClose={() => setSelectedEvent(null)} onReact={() => { void reactToEvent(selectedEvent) }} onComment={(text) => commentOnEvent(selectedEvent, text)} onReport={(reason) => { void reportEventFromSheet(selectedEvent, reason) }} onMessage={() => openMessagesFor(selectedEvent)} />}</AnimatePresence>
       <motion.div className="event-strip" initial={{ y: 18, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={spring}>
         <div className="strip-heading"><span><Activity size={14} /> В ЭФИРЕ</span><b>{filteredEvents.length} событий</b></div>
         <div className="strip-list">{filteredEvents.slice(0, 4).map((event) => <MiniEvent key={event.id} event={event} selected={event.id === selectedEvent?.id} onClick={() => selectEvent(event)} />)}</div>
@@ -351,24 +367,31 @@ function MiniEvent({ event, selected, onClick }: { event: RadarEvent; selected: 
   const config = kindConfig[event.kind]
   const Icon = config.icon
   const isHot = Date.now() - event.createdAt < 45 * 60_000
-  return <motion.button className={`mini-event ${selected ? 'selected' : ''} ${isHot ? 'hot' : ''}`} onClick={onClick} initial={{ opacity: 0, y: 7 }} animate={{ opacity: 1, y: 0 }} transition={{ ...spring, duration: .45 }} whileTap={{ scale: .98 }}><span className={`mini-event-icon ${config.color}`}><Icon size={15} /></span><span className="mini-event-copy"><strong>{event.title}</strong><small><MapPin size={11} /> {humanLocation(event.location)}</small></span><span className="mini-event-time">{relativeTime(event.createdAt)}</span><ChevronRight size={14} /></motion.button>
+  return <motion.button className={`mini-event ${selected ? 'selected' : ''} ${isHot ? 'hot' : ''}`} onClick={onClick} initial={{ opacity: 0, y: 7 }} animate={{ opacity: 1, y: 0 }} transition={{ ...spring, duration: .45 }} whileTap={{ scale: .98 }}><span className={`mini-event-icon ${config.color}`}><Icon size={15} /></span><span className="mini-event-copy"><strong>{event.title}</strong><small><MapPin size={11} /> {humanLocation(event.location)}</small><small className="mini-event-stats"><ThumbsUp size={10} /> {event.reactions} <MessageCircle size={10} /> {event.comments}</small></span><span className="mini-event-time">{relativeTime(event.createdAt)}</span><ChevronRight size={14} /></motion.button>
 }
 
-function EventSheet({ event, canInteract, canReport, canMessage, onRequireAuth, onClose, onReact, onComment, onReport, onMessage }: { event: RadarEvent; canInteract: boolean; canReport: boolean; canMessage: boolean; onRequireAuth: () => void; onClose: () => void; onReact: () => void; onComment: (text: string) => void; onReport: (reason: string) => void; onMessage: () => void }) {
+function EventSheet({ event, canInteract, canReport, canMessage, onRequireAuth, onClose, onReact, onComment, onReport, onMessage }: { event: RadarEvent; canInteract: boolean; canReport: boolean; canMessage: boolean; onRequireAuth: () => void; onClose: () => void; onReact: () => void; onComment: (text: string) => Promise<boolean>; onReport: (reason: string) => void; onMessage: () => void }) {
   const config = kindConfig[event.kind]
   const Icon = config.icon
   const [comment, setComment] = useState('')
+  const [commentSaving, setCommentSaving] = useState(false)
   const [reportReason, setReportReason] = useState('')
   const [reporting, setReporting] = useState(false)
-  const submitComment = () => { const value = comment.trim(); if (!value) return; if (!canInteract) { onRequireAuth(); return } onComment(value); setComment('') }
+  const submitComment = async () => {
+    const value = comment.trim()
+    if (!value || value.length > 500 || commentSaving) return
+    if (!canInteract) { onRequireAuth(); return }
+    setCommentSaving(true)
+    try { if (await onComment(value)) setComment('') } finally { setCommentSaving(false) }
+  }
   const submitReport = () => { const value = reportReason.trim(); if (!value) return; onReport(value); setReportReason(''); setReporting(false) }
   return <motion.aside className="event-sheet glass-panel" initial={{ opacity: 0, y: 28, scale: .98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 18, scale: .98 }} transition={spring}>
     <div className="sheet-top"><span className={`event-tag ${config.color}`}><Icon size={13} /> {event.category}</span><button className="sheet-close" onClick={onClose} aria-label="Закрыть сигнал"><X size={16} /></button></div>
     <h2>{event.title}</h2><p className="sheet-description">{event.description}</p>
     <div className="sheet-meta"><span><MapPin size={13} /> {humanLocation(event.location)}</span><span><Clock3 size={13} /> {relativeTime(event.createdAt)}</span></div>
-    <div className="sheet-footer"><span className="sheet-user"><span className="tiny-avatar"><span>{initials(event.userName)}</span>{event.avatarUrl && <img src={event.avatarUrl} alt="" onError={hideBrokenImage} />}</span>{event.userName}</span><button className={`sheet-react ${event.likedByMe ? 'active' : ''}`} onClick={canInteract ? onReact : onRequireAuth} aria-label={event.likedByMe ? 'Убрать лайк' : 'Поставить лайк'}><ThumbsUp size={14} /> {event.reactions}</button><span className="sheet-comments"><MessageCircle size={14} /> {event.comments}</span></div>
-    {!!event.commentsList?.length && <div className="comments-list" aria-label="Комментарии">{event.commentsList.map((item) => <div className="comment-item" key={item.id}><span className="tiny-avatar"><span>{initials(item.userName)}</span>{item.avatarUrl && <img src={item.avatarUrl} alt="" onError={hideBrokenImage} />}</span><div><strong>{item.userName}</strong><p>{item.body}</p></div></div>)}</div>}
-    <form className="comment-form" onSubmit={(event) => { event.preventDefault(); submitComment() }}><input value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Написать комментарий…" aria-label="Комментарий" /><button type="submit" disabled={!comment.trim()} aria-label="Добавить комментарий"><Send size={14} /></button></form>
+    <div className="sheet-footer"><span className="sheet-user"><span className="tiny-avatar"><span style={{ background: avatarColor(event.userName) }}>{initials(event.userName)}</span>{event.avatarUrl && <img src={event.avatarUrl} alt="" onError={hideBrokenImage} />}</span>{event.userName}</span><button className={`sheet-react ${event.likedByMe ? 'active' : ''}`} onClick={canInteract ? onReact : onRequireAuth} aria-label={event.likedByMe ? 'Убрать лайк' : 'Поставить лайк'}><ThumbsUp size={14} /> {event.reactions}</button><span className="sheet-comments"><MessageCircle size={14} /> {event.comments}</span></div>
+    {!!event.commentsList?.length && <div className="comments-list" aria-label="Комментарии">{event.commentsList.map((item) => <div className="comment-item" key={item.id}><span className="tiny-avatar"><span style={{ background: avatarColor(item.userName) }}>{initials(item.userName)}</span>{item.avatarUrl && <img src={item.avatarUrl} alt="" onError={hideBrokenImage} />}</span><div><strong>{item.userName}</strong><p>{item.body}</p></div></div>)}</div>}
+    <form className="comment-form" onSubmit={(formEvent) => { formEvent.preventDefault(); void submitComment() }}><input value={comment} onChange={(inputEvent) => setComment(inputEvent.target.value)} placeholder="Написать комментарий…" aria-label="Комментарий" maxLength={500} /><button type="submit" disabled={!comment.trim() || comment.trim().length > 500 || commentSaving} aria-label="Добавить комментарий"><Send size={14} /></button></form>
     {canMessage && <button className="text-action" onClick={onMessage}><MessageSquare size={14} /> Написать автору</button>}
     {canReport && !event.id.startsWith('orsk-') && <div className="report-area">{reporting ? <form className="report-form" onSubmit={(formEvent) => { formEvent.preventDefault(); submitReport() }}><input value={reportReason} onChange={(inputEvent) => setReportReason(inputEvent.target.value)} placeholder="Что нужно проверить?" aria-label="Причина жалобы" /><button type="submit" disabled={reportReason.trim().length < 3}>Отправить</button></form> : <button className="text-action" onClick={() => setReporting(true)}>Пожаловаться на сигнал</button>}</div>}
   </motion.aside>
@@ -453,7 +476,7 @@ function ProfileModal({ onClose, onAdminOpen }: { onClose: () => void; onAdminOp
     reader.readAsDataURL(file)
   }
   const save = async () => { setSaving(true); const result = await updateProfile({ name: name.trim() || user.name, city, bio: bio.trim() || null, neighborhood: neighborhood.trim() || null, notifications, avatarUrl: avatarPreview || null }); if (result) setError(result); else onClose(); setSaving(false) }
-  return <ModalFrame onClose={onClose}><div className="profile-modal"><div className="profile-modal-header"><button className="profile-avatar-button" onClick={() => avatarInput.current?.click()} aria-label="Изменить аватар"><span className="large-avatar"><span>{initials(user.name)}</span>{avatarPreview && <img src={avatarPreview} alt="Аватар" onError={hideBrokenImage} />}</span><span className="avatar-edit-badge"><Plus size={13} /></span></button><input ref={avatarInput} className="visually-hidden-file" type="file" accept="image/*" onChange={(event) => handleAvatar(event.target.files?.[0])} /><div><p className="modal-overline">МОЙ PULSE</p><h2>{user.name}<span>.</span></h2><span className="profile-email">{user.email}</span></div></div><p className="avatar-hint">Нажмите на аватар, чтобы выбрать фото из галереи</p><div className="profile-form"><label className="input-label">Ваше имя<input value={name} onChange={(event) => setName(event.target.value)} /></label><label className="input-label">Родной город<div className="select-wrap"><Navigation size={15} /><select value={city} onChange={(event) => setCity(event.target.value)}><option>Орск</option><option>Москва</option><option>Санкт-Петербург</option><option>Екатеринбург</option><option>Казань</option></select><ChevronDown size={14} /></div></label><label className="input-label">О себе<textarea value={bio} onChange={(event) => setBio(event.target.value)} maxLength={240} placeholder="Коротко о себе" /></label><label className="input-label">Район города<input value={neighborhood} onChange={(event) => setNeighborhood(event.target.value)} maxLength={120} placeholder="Например, 2-й микрорайон" /></label><button className="setting-toggle" onClick={() => setNotifications((value) => !value)}><span><Bell size={16} /><span><strong>Уведомления рядом</strong><small>Получать важные сигналы в вашем городе</small></span></span><i className={notifications ? 'on' : ''}><b /></i></button></div>{error && <p className="form-error">{error}</p>}<div className="profile-actions">{user.role === 'admin' && <button className="text-action" onClick={onAdminOpen}>Открыть модерацию</button>}<button className="logout-action" onClick={() => { void logout(); onClose() }}><LogOut size={15} /> Выйти</button><button className="primary-action compact" disabled={saving} onClick={() => { void save() }}>{saving ? 'Сохраняем…' : 'Сохранить'} <Check size={15} /></button></div></div></ModalFrame>
+  return <ModalFrame onClose={onClose}><div className="profile-modal"><div className="profile-modal-header"><button className="profile-avatar-button" onClick={() => avatarInput.current?.click()} aria-label="Изменить аватар"><span className="large-avatar"><span style={{ background: avatarColor(user.name) }}>{initials(user.name)}</span>{avatarPreview && <img src={avatarPreview} alt="Аватар" onError={hideBrokenImage} />}</span><span className="avatar-edit-badge"><Plus size={13} /></span></button><input ref={avatarInput} className="visually-hidden-file" type="file" accept="image/*" onChange={(event) => handleAvatar(event.target.files?.[0])} /><div><p className="modal-overline">МОЙ PULSE</p><h2>{user.name}<span>.</span></h2><span className="profile-email">{user.email}</span></div></div><p className="avatar-hint">Нажмите на аватар, чтобы выбрать фото из галереи</p><div className="profile-form"><label className="input-label">Ваше имя<input value={name} onChange={(event) => setName(event.target.value)} /></label><label className="input-label">Родной город<div className="select-wrap"><Navigation size={15} /><select value={city} onChange={(event) => setCity(event.target.value)}><option>Орск</option><option>Москва</option><option>Санкт-Петербург</option><option>Екатеринбург</option><option>Казань</option></select><ChevronDown size={14} /></div></label><label className="input-label">О себе<textarea value={bio} onChange={(event) => setBio(event.target.value)} maxLength={240} placeholder="Коротко о себе" /></label><label className="input-label">Район города<input value={neighborhood} onChange={(event) => setNeighborhood(event.target.value)} maxLength={120} placeholder="Например, 2-й микрорайон" /></label><button className="setting-toggle" onClick={() => setNotifications((value) => !value)}><span><Bell size={16} /><span><strong>Уведомления рядом</strong><small>Получать важные сигналы в вашем городе</small></span></span><i className={notifications ? 'on' : ''}><b /></i></button></div>{error && <p className="form-error">{error}</p>}<div className="profile-actions">{user.role === 'admin' && <button className="text-action" onClick={onAdminOpen}>Открыть модерацию</button>}<button className="logout-action" onClick={() => { void logout(); onClose() }}><LogOut size={15} /> Выйти</button><button className="primary-action compact" disabled={saving} onClick={() => { void save() }}>{saving ? 'Сохраняем…' : 'Сохранить'} <Check size={15} /></button></div></div></ModalFrame>
   }
 
 function MessagesPanel({ recipient, onClose, onNotify }: { recipient: { id: string; name: string }; onClose: () => void; onNotify: (message: string, tone?: Toast['tone']) => void }) {

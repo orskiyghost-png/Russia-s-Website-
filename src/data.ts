@@ -5,6 +5,13 @@ import { isSupabaseConfigured, supabase } from './lib/supabase'
 
 export const DEFAULT_CENTER: [number, number] = [51.2049, 58.5668]
 
+/** Stable avatar color: the same display name always gets the same fallback color. */
+export function avatarColor(name: string) {
+  let hash = 0
+  for (const character of name.trim().toLowerCase()) hash = (hash * 31 + character.charCodeAt(0)) | 0
+  return `hsl(${Math.abs(hash) % 360} 68% 58%)`
+}
+
 export const layerConfig: Array<{ id: Layer; label: string; icon: IconComponent; color: string }> = [
   { id: 'all', label: 'Все сигналы', icon: Layers3, color: 'lime' },
   { id: 'roads', label: 'ДТП и Дороги', icon: Construction, color: 'amber' },
@@ -107,6 +114,7 @@ export async function createEvent(payload: { kind: EventKind; category: string; 
   const { data, error } = await supabase.rpc('create_event', { p_kind: payload.kind, p_category: payload.category, p_title: payload.title, p_description: payload.description, p_lat: payload.lat, p_lng: payload.lng })
   if (error) throw error
   const row = Array.isArray(data) ? data[0] : data
+  if (!row) throw new Error('EVENT_NOT_CREATED')
   const created = fromRow(row as EventRow)
   const address = payload.address?.trim() || null
   if (address && created.id) {
@@ -114,6 +122,12 @@ export async function createEvent(payload: { kind: EventKind; category: string; 
     if (!addressResult.error) return { ...created, address, location: address }
   }
   return created
+}
+
+export async function setEventAddress(eventId: string, address: string): Promise<void> {
+  if (!isSupabaseConfigured || !address.trim()) return
+  const { error } = await supabase.rpc('set_event_address', { p_event_id: eventId, p_address: address.trim() })
+  if (error) throw error
 }
 
 export type EventReport = { id: string; eventId: string; reason: string; status: 'open' | 'reviewed' | 'dismissed'; createdAt: number }
@@ -198,6 +212,6 @@ export function apiErrorKind(error: unknown): 'auth' | 'admin' | 'rate-limit' | 
   if (message.includes('AUTH_REQUIRED') || message.includes('PERMANENT_ACCOUNT_REQUIRED')) return 'auth'
   if (message.includes('ADMIN_REQUIRED')) return 'admin'
   if (message.includes('RATE_LIMIT') || message.includes('COMMENT_RATE_LIMIT')) return 'rate-limit'
-  if (lowered.includes('could not find the function') || (lowered.includes('function') && lowered.includes('does not exist'))) return 'missing-rpc'
+  if (lowered.includes('could not find the function') || (lowered.includes('function') && lowered.includes('does not exist')) || lowered.includes('schema cache')) return 'missing-rpc'
   return 'other'
 }
