@@ -394,7 +394,7 @@ function AuthModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () 
     setSubmitting(true)
     try {
       const result = mode === 'login' ? await login(email, password, captchaToken) : await register(name, email, password, captchaToken)
-      if (result.error) setError(/captcha/i.test(result.error) ? `${result.error} Если проверка не появляется, добавьте VITE_TURNSTILE_SITE_KEY в Settings → Environment.` : result.error)
+      if (result.error) setError(result.error)
       else onSuccess()
     } catch {
       setError('Не удалось связаться с сервером. Проверьте подключение и попробуйте ещё раз.')
@@ -417,7 +417,7 @@ function AuthModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () 
     <button className="primary-action" disabled={submitting} onClick={() => { void submit() }}>{submitting ? 'Проверяем…' : mode === 'login' ? 'Войти' : 'Зарегистрироваться'}<ArrowRight size={16} /></button>
     {error && <p className="form-error">{error}</p>}
     <button className="auth-choice auth-choice-quiet guest-auth-button" disabled={submitting} onClick={onClose}><span className="auth-choice-icon"><MapIcon size={16} /></span><span><strong>Продолжить без аккаунта</strong><small>Просмотр карты и поиск доступны гостям</small></span></button>
-    <p className="auth-disclaimer">Вход и регистрация защищены Cloudflare Turnstile.</p>
+    <p className="auth-disclaimer">Вход и регистрация защищены капчей hCaptcha.</p>
   </div></ModalFrame>
 }
 
