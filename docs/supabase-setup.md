@@ -35,7 +35,11 @@ PULSE использует классическую связку **Email + Passw
 
 1. **Authentication → Providers → Email**: включите Email provider, разрешите регистрацию и **отключите Confirm email** (иначе после регистрации не будет создаваться сессия).
 2. **Authentication → URL Configuration**: задайте Site URL и Redirect URL продакшена. Не используйте URL GitHub repository как redirect.
-3. **Authentication → Bot and Abuse Protection** (опционально): можно включить **Cloudflare Turnstile** и вставить **Secret Key** (сам key остаётся только здесь). Публичный site key передаётся фронтенду через `VITE_TURNSTILE_SITE_KEY` и отправляется в Supabase через `options.captchaToken` при `signInWithPassword()` / `signUp()`. **Важно:** если включить Bot and Abuse Protection, вход и регистрация **будут требовать** рабочий виджет Turnstile. В некоторых регионах (например, в РФ) `challenges.cloudflare.com` недоступен — виджет показывает «невозможно подключиться к сайту», и вход становится невозможным. Для таких случаев держите Bot and Abuse Protection **выключенным** — антиспам уже обеспечен лимитами в RPC (`create_event`, `add_comment`), а капча останется необязательным украшением в форме.
+3. **Authentication → Bot and Abuse Protection**: включите защиту и выберите провайдера капчи:
+   - **Cloudflare Turnstile** — подходит, если пользователи вне РФ. Secret Key вставляется только здесь; публичный site key — в `VITE_TURNSTILE_SITE_KEY`.
+   - **hCaptcha** — рекомендуется для РФ: серверы Cloudflare (`challenges.cloudflare.com`) в России часто недоступны, виджет Turnstile показывает «невозможно подключиться к сайту» и блокирует вход. hCaptcha в РФ работает, а Supabase проверяет её токен так же, как Turnstile. Создайте ключи на hcaptcha.com (укажите hostname сайта), вставьте **Secret Key** в Supabase, а публичный site key — в `VITE_HCAPTCHA_SITE_KEY` (код сам переключится на hCaptcha, если задан его ключ).
+
+Токен капчи отправляется в Supabase через `options.captchaToken` при `signInWithPassword()` / `signUp()`.
 
 Поток авторизации:
 

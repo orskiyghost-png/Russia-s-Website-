@@ -628,7 +628,7 @@ html[data-theme='light'] .map-vignette {
 .auth-choice-quiet { border-style: dashed; }
 
 /* CAPTCHA */
-.captcha-widget { min-height: 65px; display: flex; align-items: center; justify-content: flex-start; margin: 12px 0 4px; overflow: hidden; border-radius: var(--r-sm); }
+.captcha-widget { min-height: 80px; display: flex; align-items: center; justify-content: flex-start; margin: 12px 0 4px; overflow: hidden; border-radius: var(--r-sm); }
 .captcha-missing { margin: 10px 0 4px; padding: 10px 12px; color: var(--amber); background: color-mix(in srgb, var(--amber) 12%, transparent); border: 1px solid color-mix(in srgb, var(--amber) 28%, transparent); border-radius: var(--r-sm); font-size: 11px; line-height: 1.4; }
 
 /* Report modal */
